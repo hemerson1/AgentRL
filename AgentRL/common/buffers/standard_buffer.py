@@ -31,12 +31,9 @@ class standard_replay_buffer(base_buffer):
 
     def push(self, state, next_state, action, reward, done):
         
-        # add an extra element to a non-full list
-        self.buffer.append(None)
+        # add the most recent sample
+        self.buffer.append((state, next_state, action, reward, done))
            
-        # set the current buffer position to the input
-        self.buffer[-1] = (state, next_state, action, reward, done)
-        
         # trim list to the max size
         if len(self.buffer) > self.max_size:
             del self.buffer[0]
@@ -47,17 +44,17 @@ class standard_replay_buffer(base_buffer):
         batch = random.sample(self.buffer, batch_size)
         state, action, reward, next_state, done = map(np.stack, zip(*batch))  # stack for each element
         
-        return state, action, reward, next_state, done
-            
+        return state, action, reward, next_state, done            
         
     def get_length(self):
         return len(self.buffer)        
+    
+    
+# TESTING ###################################################
         
 if __name__ == '__main__':
     
     buffer = standard_replay_buffer(max_size=100_000)
-    
-    # TESTING ###################################################
     
     # test the appending to the array    
     tic = time.perf_counter()
@@ -84,7 +81,7 @@ if __name__ == '__main__':
     
     for i in range(10_000):
         
-        buffer.sample(batch_size=64)
+        buffer.sample(batch_size=32)
         
     toc_1 = time.perf_counter()
     print('Sampling took {} seconds'.format(toc_1 - tic_1))    

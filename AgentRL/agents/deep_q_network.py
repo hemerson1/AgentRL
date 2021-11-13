@@ -7,16 +7,35 @@ Created on Sat Nov 13 12:01:19 2021
 """
 
 from AgentRL.agents.base import base_agent
+from AgentRL.common.value_networks.standard_Q_net import standard_Q_network
+
+# Inspiration for the implementation was taken from:
+# https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
 
 class DQN(base_agent):
     
     # TODO: map out the rough structure of the algorithm
     
-    def __init__(self, input_type="array", 
-                 replay_buffer = None,
-                 exploration_strategy="greedy",
+    def __init__(self, 
+                 
+                 # Environment
+                 state_dim,
+                 action_dim,
+                 input_type = "array", 
+                 
+                 # Hyperparameters
+                 hidden_dim = 32, 
                  batch_size = 64,
-                 gamma = 0.99
+                 gamma = 0.99,
+                 
+                 # Replay 
+                 replay_buffer = None,
+                 
+                 # Exploration
+                 exploration_strategy = "greedy",
+                 starting_expl_threshold = 1.0,
+                 expl_decay_factor = 0.999, 
+                 min_expl_threshold = 0.01
                  ):
         
         # TODO: update the default hyperparameters
@@ -25,16 +44,27 @@ class DQN(base_agent):
         # TODO: add an assertion to check if replay buffer is valid (not just not None)
         
         # Set the parameters of the environment
+        self.state_dim = state_dim
+        self.action_dim = action_dim
         self.input_type = input_type
+        
+        # Set the hyperparameters 
+        self.hidden_dim = hidden_dim
+        self.batch_size = batch_size
+        self.gamma = gamma
         
         # Set the structure of the agent
         self.replay_buffer = replay_buffer
-        self.exploration_strategy = exploration_strategy
+        self.q_net = standard_Q_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim)    
         
-        # Set the hyperparameters 
-        self.batch_size = batch_size
-        self.gamma = gamma
-    
+        # Configure the exploration strategy
+        
+        # e - greedy policy
+        if exploration_strategy == "greedy":
+            
+            self.policy = 
+            
+                
     def update(self):
         
         # Sample a batch from the replay buffer
@@ -52,7 +82,7 @@ class DQN(base_agent):
         
         raise NotImplementedError        
         
-    def get_action(self, state):
+    def get_action(self, state):        
         
         # For epsilon - greedy
         
