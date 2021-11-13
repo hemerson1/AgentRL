@@ -11,12 +11,21 @@ class base_buffer():
     def __init__(self):
         
         # TODO: fill in the structure of the inheritance class
+        """ 
+        Each agent must have the following variables: 
+            
+        self.buffer_size - int (how many samples does the buffer store?)
+        
+        """                
         pass
 
     def push(self):
         raise NotImplementedError        
         
     def sample(self):
+        raise NotImplementedError
+        
+    def get_length(self):
         raise NotImplementedError
         
         
