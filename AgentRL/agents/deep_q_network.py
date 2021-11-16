@@ -34,6 +34,12 @@ class DQN(base_agent):
                  hidden_dim = 32, 
                  batch_size = 64,
                  gamma = 0.99,
+                 learning_rate = 1e-3,
+                 
+                 # Update
+                 update_method = "hard",
+                 update_interval = 1
+                 tau = 1e-2,
                  
                  # Replay 
                  replay_buffer = None,
@@ -44,6 +50,10 @@ class DQN(base_agent):
                  expl_decay_factor = 0.999, 
                  min_expl_threshold = 0.01
                  ):
+        
+        # TODO: add cpu and gpu compatibility
+        
+        # TODO: how will you make sure the string options selected are correct?
         
         # TODO: update the default hyperparameters
         
@@ -62,20 +72,21 @@ class DQN(base_agent):
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
         self.gamma = gamma
+        self.learning_rate = learning_rate
         
         # Set the structure of the agent
         self.replay_buffer = replay_buffer
         self.q_net = standard_value_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim)    
         self.target_q_net = standard_value_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim)    
         self.target_q_net.load_state_dict(self.q_net.state_dict())
+        self.optimiser = torch.optim.Adam(self.q_net.parameters(), lr=self.learning_rate)
         
         # Configure the exploration strategy
         
         # set-up the e - greedy policy
-        self.exploration_strategy = exploration_strategy
-        self.GREEDY = "greedy"        
+        self.exploration_strategy = exploration_strategy   
         
-        if exploration_strategy == self.GREEDY:
+        if exploration_strategy == "greedy":
             self.policy = epsilon_greedy(
                 self.action_num,
                 starting_expl_threshold = starting_expl_threshold,
@@ -109,17 +120,26 @@ class DQN(base_agent):
         loss = F.smooth_l1_loss(current_Q, target_Q)
         
         # Perform a gradient update        
-        optimizer.zero_grad()
+        self.optimiser.zero_grad()
         loss.backward()
-        optimizer.step()
+        self.optimiser.step()
+        
+        # TODO: Add internal counter for timesteps
 
-        # Perform a soft update        
+        # Perform a hard update     
+        if self.update_method == 'hard':
+            self.target_q_net.load_state_dict(self.q_net.state_dict())
+        
+        # Perform a soft update 
+        elif self.update_method == 'soft':
+            for target_param, orig_param in zip(self.target_q_net.parameters(), self.q_net.parameters()):
+                target_param.data.copy_(self.tau * orig_param.data + (1.0 - self.tau) * target_param.data)
                 
         
     def get_action(self, state): 
         
         # For epsilon - greedy
-        if self.exploration_strategy == self.GREEDY:             
+        if self.exploration_strategy == "greedy":             
             action = self.policy.get_action(self.q_net, state)
             
             # update the exploration params
