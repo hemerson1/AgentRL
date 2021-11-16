@@ -11,47 +11,101 @@ from AgentRL.common.exploration.base import base_exploration
 import numpy as np
 import torch
 
+# For testing:
+from AgentRL.common.value_networks.standard_value_net import standard_value_network
+
 class epsilon_greedy(base_exploration):
     
     def __init__(self, 
-                 action_dim,
                  action_num,
                  starting_expl_threshold = 1.0,
                  expl_decay_factor = 0.999, 
                  min_expl_threshold = 0.01
                  ):
          
-        self.action_dim = action_dim
         self.action_num= action_num
         
+        self.starting_expl_threshold = starting_expl_threshold
         self.current_exploration = starting_expl_threshold
         self.expl_decay_factor = expl_decay_factor
         self.min_expl_threshold = min_expl_threshold        
         
-    def get_action(self, q_network, state):
-        
-        # TODO: test the functionality 
-        
+    def get_action(self, value_network, state):
+                
         # get a random number
         random_num = np.random.uniform(0,1,1)[0]
         
         # get a random action
         if random_num <= self.current_exploration:
-            action = np.random.randint(0, self.action_num, size=self.action_dim)
+            action = np.random.randint(0, self.action_num, size=(1,))
             
         # take the action(s) with the max Q value(s)
         else:
+            
+            # convert to tensor and select argmax
+            tensor_state = torch.FloatTensor(state)
             with torch.no_grad():
-                action = q_network(state).cpu().data.numpy()
+                action = torch.argmax(value_network(tensor_state)).unsqueeze(0)
+                action = action.cpu().data.numpy()
                 
         return action
+    
+    def reset(self):
+        
+        # reset the current exploration to the starting
+        self.current_exploration = self.starting_expl_threshold
+    
+    def update(self):
+        
+        # multiply by decay factor
+        self.current_exploration *= self.expl_decay_factor
+        
+        # check value does not exceed minimum
+        self.current_exploration = max(self.current_exploration, 
+                                       self.min_expl_threshold)
+        
                 
                 
 if __name__ == "__main__":    
     
-    exp = epsilon_greedy(2, np.array([2, 3]))
+    # define a test environment
+    state_dim = 2
+    action_num = 8
+    hidden_dim = 10
     
-    exp.get_action()
+    # Initialise value net and epsilon greedy policy
+    value_net = standard_value_network(state_dim, action_num, hidden_dim=hidden_dim)    
+    exp = epsilon_greedy(action_num)
+    
+    # change from random to argmax policy
+    # exp.current_exploration = 0.0
+    
+    # get a test state
+    test_state = np.array([10, 5], dtype=np.int32)
+    
+    # get the e-greedy action
+    action = exp.get_action(value_net, test_state)
+    
+    # show the action's value, shape and dim
+    # print(action)
+    # print(action.shape)
+    # print(type(action))
+    
+    # Test the update function
+    for i in range(1, 10_000 + 1):
+        
+        if i % 1_000 == 0:
+            print('Episode {} - Exploration {}'.format(i, exp.current_exploration))
+        
+        exp.update()
+    
+    # Test the reset function
+    exp.reset()
+    print('Final exploration {}'.format(exp.current_exploration))
+        
+        
+        
+    
     
     
     

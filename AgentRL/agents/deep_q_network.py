@@ -7,20 +7,27 @@ Created on Sat Nov 13 12:01:19 2021
 """
 
 from AgentRL.agents.base import base_agent
-from AgentRL.common.value_networks.standard_Q_net import standard_Q_network
+from AgentRL.common.value_networks.standard_value_net import standard_value_network
+from AgentRL.common.exploration.e_greedy import epsilon_greedy
+
+import numpy as np
+import torch
+import torch.nn.functional as F
+
+# Testing:
+from AgentRL.common.buffers.standard_buffer import standard_replay_buffer
 
 # Inspiration for the implementation was taken from:
-# https://pytorch.org/tutorials/intermediate/reinforcement_q_learning.html
+# https://github.com/seungeunrho/minimalRL/blob/master/dqn.py
 
 class DQN(base_agent):
-    
-    # TODO: map out the rough structure of the algorithm
     
     def __init__(self, 
                  
                  # Environment
                  state_dim,
-                 action_dim,
+                 action_num,
+                 action_dim = 1,
                  input_type = "array", 
                  
                  # Hyperparameters
@@ -45,8 +52,11 @@ class DQN(base_agent):
         
         # Set the parameters of the environment
         self.state_dim = state_dim
+        self.action_num = action_num
         self.action_dim = action_dim
         self.input_type = input_type
+        
+        # TODO: set the torch, numpy and random seed
         
         # Set the hyperparameters 
         self.hidden_dim = hidden_dim
@@ -55,46 +65,67 @@ class DQN(base_agent):
         
         # Set the structure of the agent
         self.replay_buffer = replay_buffer
-        self.q_net = standard_Q_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim)    
+        self.q_net = standard_value_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim)    
+        self.target_q_net = standard_value_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim)    
+        self.target_q_net.load_state_dict(self.q_net.state_dict())
         
         # Configure the exploration strategy
         
-        # e - greedy policy
-        if exploration_strategy == "greedy":
-            
-            self.policy = 
+        # set-up the e - greedy policy
+        self.exploration_strategy = exploration_strategy
+        self.GREEDY = "greedy"        
+        
+        if exploration_strategy == self.GREEDY:
+            self.policy = epsilon_greedy(
+                self.action_num,
+                starting_expl_threshold = starting_expl_threshold,
+                expl_decay_factor = expl_decay_factor, 
+                min_expl_threshold = min_expl_threshold                                        
+            )
             
                 
     def update(self):
         
         # Sample a batch from the replay buffer
+        if self.replay_buffer.get_length() > self.batch_size:
+            state, action, reward, next_state, done  = self.replay_buffer.sample(batch_size=self.batch_size)
+        else:
+            return
+        
+        # TODO: make sure that the replay outputs tensors
+        
+        # TODO: finish update implementation
         
         # Use the Q network to predict the Q values for the current states
+        current_Q = self.q_net(state)
         
         # Use the Q network to predict the Q values for the next states
+        next_Q = self.target_q_net(next_state)
         
         # Compute the updated Q value using:
-        # Q_exp = r + (1 - done) * done * max(next_Q)
+        target_Q = reward + (1 - done) * self.gamma * torch.max(next_Q)
         
         # Compute the loss - the MSE of the current and the expected Q value
+        loss = F.smooth_l1_loss(current_Q, target_Q)
         
         # Perform a gradient update        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Perform a soft update        
+                
         
-        raise NotImplementedError        
-        
-    def get_action(self, state):        
+    def get_action(self, state): 
         
         # For epsilon - greedy
-        
-        # Get the exploration val at this timestep
-        
-        # If exploration > threshold: take random discrete action
-        
-        # Else: select the action corresponding to the largest Q_value for that state
-        
-        # return the action        
-        
-        raise NotImplementedError        
+        if self.exploration_strategy == self.GREEDY:             
+            action = self.policy.get_action(self.q_net, state)
+            
+            # update the exploration params
+            self.policy.update()
+            
+            return action     
     
     def save_model(self):
         raise NotImplementedError         
@@ -104,4 +135,47 @@ class DQN(base_agent):
 
 if __name__ == '__main__':
     
-    agent = DQN()
+    # Set up the test params
+    state_dim = 2
+    action_num = 9
+    state = np.array([10, 2], dtype=np.float32)
+    reward = 2
+    done = False
+    replay_size = 5_000
+    
+    # Intialise the buffer
+    buffer = standard_replay_buffer(max_size=replay_size)
+    
+    # Initialise the agent
+    agent = DQN(state_dim=2, 
+                action_num=9,
+                replay_buffer=buffer) 
+    
+    # Create an update loop 
+    print('Starting exploration: {}'.format(agent.policy.current_exploration))
+    for timestep in range(1, 10_000 + 1):        
+
+        # get an agent action
+        action = agent.get_action(state)
+        
+        # push test samples to the replay buffer
+        buffer.push(state=state, action=action, 
+                    next_state=state, reward=reward, done=done)
+        
+        # display the test parameters
+        if timestep % 1000 == 0:
+            print('Steps {}'.format(timestep))
+            print('------------------------------')
+            print('Current buffer length {}'.format(buffer.get_length()))
+            print('Current action: {}/{}'.format(action[0], action_num - 1))
+            print('Exploration: {}'.format(agent.policy.current_exploration))
+            print('------------------------------')
+        
+        # update the agent's policy
+        agent.update()
+    
+    print('Selected action: {}/{}'.format(action[0], action_num - 1))
+    
+    
+    
+    
