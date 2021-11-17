@@ -33,8 +33,12 @@ class standard_value_network(base_value_network):
         x = self.activation(self.linear_3(x))
         x = self.linear_4(x)
         
-        return x        
+        return x      
+    
+# TESTING ###################################################
         
 if __name__ == '__main__':
     
     Q_net = standard_value_network(10, 2)
+    
+#################################################################

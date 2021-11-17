@@ -18,6 +18,9 @@ class base_buffer():
         
         """                
         pass
+    
+    def reset(self):
+        raise NotImplementedError
 
     def push(self):
         raise NotImplementedError        

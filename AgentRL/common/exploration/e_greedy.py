@@ -18,12 +18,15 @@ class epsilon_greedy(base_exploration):
     
     def __init__(self, 
                  action_num,
+                 device = 'cpu',
                  starting_expl_threshold = 1.0,
                  expl_decay_factor = 0.999, 
                  min_expl_threshold = 0.01
                  ):
          
         self.action_num= action_num
+        
+        self.device = device
         
         self.starting_expl_threshold = starting_expl_threshold
         self.current_exploration = starting_expl_threshold
@@ -43,7 +46,7 @@ class epsilon_greedy(base_exploration):
         else:
             
             # convert to tensor and select argmax
-            tensor_state = torch.FloatTensor(state)
+            tensor_state = torch.FloatTensor(state).to(self.device)
             with torch.no_grad():
                 action = torch.argmax(value_network(tensor_state)).unsqueeze(0)
                 action = action.cpu().data.numpy()
@@ -64,7 +67,7 @@ class epsilon_greedy(base_exploration):
         self.current_exploration = max(self.current_exploration, 
                                        self.min_expl_threshold)
         
-                
+# TESTING ###################################################
                 
 if __name__ == "__main__":    
     
@@ -102,6 +105,8 @@ if __name__ == "__main__":
     # Test the reset function
     exp.reset()
     print('Final exploration {}'.format(exp.current_exploration))
+    
+#################################################################
         
         
         
