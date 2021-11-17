@@ -6,6 +6,12 @@ Created on Sat Nov 13 14:06:47 2021
 @author: hemerson
 """
 
+""" 
+standard_replay_buffer - A simple replay buffer storing samples of data and 
+                         then returning a random batch 
+
+"""
+
 from AgentRL.common.buffers.base import base_buffer
 
 import random

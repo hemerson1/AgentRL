@@ -6,6 +6,12 @@ Created on Sat Nov 13 12:01:19 2021
 @author: hemerson
 """
 
+""" 
+DQN - An implementation of a deep Q network originally introduced in:
+      https://arxiv.org/abs/1312.5602
+
+"""
+
 from AgentRL.agents.base import base_agent
 from AgentRL.common.value_networks.standard_value_net import standard_value_network
 from AgentRL.common.exploration.e_greedy import epsilon_greedy
@@ -27,6 +33,7 @@ class DQN(base_agent):
     # TODO: test the DQNs learning functionality
     # TODO: use testing to set default hyperparameters
     # TODO: test GPU functionality using the server
+    # TODO: add compatibility for input_type
     
     def __init__(self, 
                  
@@ -34,7 +41,7 @@ class DQN(base_agent):
                  state_dim,
                  action_num,
                  action_dim = 1,
-                 input_type = "array", # or image? 
+                 input_type = "array", 
                  seed = None,
                  
                  # Device
@@ -83,6 +90,11 @@ class DQN(base_agent):
             + "'AgentRL/common/buffers' is utilised. If you are trying to implement a custom " \
             + "buffer ensure that it is built inline with the template in base.py." 
         assert isinstance(replay_buffer, test_buffer), replay_buffer_error
+        
+        # Ensure the action_dim is correct
+        action_dim_error = "action_dim is invalid, the current implementation only " \
+            + "supports 1D action spaces."
+        assert action_dim == 1, action_dim_error
         
         # Set the parameters of the environment
         self.state_dim = state_dim
@@ -211,13 +223,24 @@ class DQN(base_agent):
             
             return action  
 
-    # TODO: implement model saving and loading
-    
-    def save_model(self):
-        raise NotImplementedError         
+    def save_model(self, path):
         
-    def load_model(self):
-        raise NotImplementedError 
+        # save the q network
+        torch.save(self.q_net.state_dict(), path + '_q_network')
+        
+        # save the target network
+        torch.save(self.target_q_net.state_dict(), path + '_target_q_network')
+        
+    def load_model(self, path):
+        
+        # load the q network
+        self.q_net.load_state_dict(torch.load(path +'_q_network'))
+        self.q_net.eval()
+        
+        # load the target network
+        self.target_q_net.load_state_dict(torch.load(path +'_target_q_network'))
+        self.target_q_net.eval()
+
 
 # TESTING ###################################################
 
@@ -226,6 +249,7 @@ if __name__ == '__main__':
     # Set up the test params
     state_dim = 2
     action_num = 9
+    action_dim = 2
     state = np.array([10, 2], dtype=np.float32)
     reward = 2
     done = False
@@ -237,8 +261,9 @@ if __name__ == '__main__':
     buffer = standard_replay_buffer(max_size=replay_size)
     
     # Initialise the agent
-    agent = DQN(state_dim=2, 
-                action_num=9,
+    agent = DQN(state_dim=state_dim, 
+                action_num=action_num,
+                action_dim=action_dim,
                 replay_buffer=buffer,
                 target_update_method="hard", 
                 exploration_method="greedy"

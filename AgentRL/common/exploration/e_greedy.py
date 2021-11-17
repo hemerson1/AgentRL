@@ -6,6 +6,13 @@ Created on Sat Nov 13 18:28:50 2021
 @author: hemerson
 """
 
+""" 
+epsilon_greedy - Implementation of an epsilon greedy policy in which the agent
+                 has a probability of selecting a random action as opposed to 
+                 selecting the action which maximises expected reward
+
+"""
+
 from AgentRL.common.exploration.base import base_exploration
 
 import numpy as np
@@ -17,17 +24,18 @@ from AgentRL.common.value_networks.standard_value_net import standard_value_netw
 class epsilon_greedy(base_exploration):
     
     def __init__(self, 
-                 action_num,
+                 action_num = 1,
                  device = 'cpu',
                  starting_expl_threshold = 1.0,
                  expl_decay_factor = 0.999, 
                  min_expl_threshold = 0.01
                  ):
          
-        self.action_num= action_num
+        self.action_num = action_num
         
         self.device = device
         
+        # define the exploration parameters
         self.starting_expl_threshold = starting_expl_threshold
         self.current_exploration = starting_expl_threshold
         self.expl_decay_factor = expl_decay_factor

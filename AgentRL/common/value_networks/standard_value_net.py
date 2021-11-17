@@ -6,6 +6,11 @@ Created on Sat Nov 13 17:30:59 2021
 @author: hemerson
 """
 
+""" 
+standard_value_network -  a simple feedforward value network
+
+"""
+
 from AgentRL.common.value_networks.base import base_value_network
 
 import torch.nn as nn
