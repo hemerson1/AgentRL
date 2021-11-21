@@ -176,6 +176,11 @@ class DQN(base_agent):
             else:
                 return
             
+            # ensure that the state and next state are floats
+            # this is required to be input into the feedforward neural network
+            state = state.type(torch.float32)
+            next_state = next_state.type(torch.float32)
+            
             # Use the Q network to predict the Q values for the current states
             current_Q = self.q_net(state)
             
@@ -250,7 +255,7 @@ if __name__ == '__main__':
     state_dim = 2
     action_num = 9
     action_dim = 1
-    state = np.array([10, 2], dtype=np.float32)
+    state = np.array([10, 2], dtype=np.int32)
     reward = 2
     done = False
     replay_size = 5_000
