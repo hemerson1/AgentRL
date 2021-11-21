@@ -249,7 +249,7 @@ if __name__ == '__main__':
     # Set up the test params
     state_dim = 2
     action_num = 9
-    action_dim = 2
+    action_dim = 1
     state = np.array([10, 2], dtype=np.float32)
     reward = 2
     done = False

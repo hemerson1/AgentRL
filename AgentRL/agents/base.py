@@ -73,7 +73,7 @@ class base_agent():
         
         Returns:
         ----------
-        state - np.float32 (the selected action from the agent)     
+        action - np.int32 (the selected action from the agent)     
         """    
         raise NotImplementedError      
         
