@@ -95,6 +95,7 @@ if __name__ == "__main__":
     test_state = np.array([10, 5], dtype=np.int32)
     
     # get the e-greedy action
+    exp.current_exploration = 0
     action = exp.get_action(value_net, test_state)
     
     # show the action's value, shape and dim

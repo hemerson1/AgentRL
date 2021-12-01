@@ -54,7 +54,7 @@ class DQN(base_agent):
                  learning_rate = 1e-3,
                  
                  # Update
-                 network_updat_freq = 1,
+                 network_update_freq = 1,
                  target_update_method = "hard",
                  target_update_freq = 1,
                  tau = 1e-2,
@@ -120,7 +120,7 @@ class DQN(base_agent):
         
         # Set the update frequency
         self.target_update_method = target_update_method
-        self.network_updat_freq = network_updat_freq
+        self.network_update_freq = network_update_freq
         self.target_update_freq = target_update_freq
         
         # Configure the exploration strategy
@@ -160,15 +160,15 @@ class DQN(base_agent):
         self.replay_buffer.reset()
         
         # Reinitialise the networks and optimisers
-        self.q_net = standard_value_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim).to(self.device)   
-        self.target_q_net = standard_value_network(self.state_dim, self.action_dim, hidden_dim=self.hidden_dim).to(self.device) 
+        self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device)   
+        self.target_q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
         self.target_q_net.load_state_dict(self.q_net.state_dict())
         self.optimiser = torch.optim.Adam(self.q_net.parameters(), lr=self.learning_rate)          
                 
     def update(self):
         
         # Update the network at the specified interval
-        if self.current_step % self.network_updat_freq == 0:
+        if self.current_step % self.network_update_freq == 0:
         
             # Sample a batch from the replay buffer
             if self.replay_buffer.get_length() > self.batch_size:
@@ -280,11 +280,11 @@ if __name__ == '__main__':
 
         # get an agent action
         action = agent.get_action(state)
-        
+                        
         # push test samples to the replay buffer
         buffer.push(state=state, action=action, 
                     next_state=state, reward=reward, done=done)
-        
+                        
         # display the test parameters
         if timestep % 1000 == 0:
             print('\n------------------------------')
