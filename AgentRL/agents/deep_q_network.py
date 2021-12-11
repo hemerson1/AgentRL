@@ -30,8 +30,6 @@ from AgentRL.common.buffers.standard_buffer import standard_replay_buffer
 
 class DQN(base_agent):
     
-    # TODO: test the DQNs learning functionality
-    # TODO: use testing to set default hyperparameters
     # TODO: test GPU functionality using the server
     # TODO: add compatibility for input_type
     
@@ -49,14 +47,14 @@ class DQN(base_agent):
                  
                  # Hyperparameters
                  hidden_dim = 32, 
-                 batch_size = 64,
+                 batch_size = 32,
                  gamma = 0.99,
                  learning_rate = 1e-3,
                  
                  # Update
                  network_update_freq = 1,
                  target_update_method = "hard",
-                 target_update_freq = 1,
+                 target_update_freq = 10,
                  tau = 1e-2,
                  
                  # Replay 
@@ -181,16 +179,18 @@ class DQN(base_agent):
             state = state.type(torch.float32)
             next_state = next_state.type(torch.float32)
             
-            # Use the Q network to predict the Q values for the current states
-            current_Q = self.q_net(state)
+            # Use the Q network to predict the Q values for the current states 
+            # and take the Q value for the action that occured
+            current_Q = self.q_net(state).gather(1, action)
             
             # Use the Q network to predict the Q values for the next states
             next_Q = self.target_q_net(next_state)
             
             # Compute the updated Q value using:
             not_done = ~done
-            target_Q = reward + not_done * self.gamma * torch.max(next_Q)
-                                    
+            
+            target_Q = reward + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
+            
             # Compute the loss - the MSE of the current and the expected Q value
             loss = F.smooth_l1_loss(current_Q, target_Q)
             
@@ -222,7 +222,7 @@ class DQN(base_agent):
         # For epsilon - greedy
         if self.exploration_method == "greedy":             
             action = self.policy.get_action(self.q_net, state)
-            
+
             # update the exploration params
             self.policy.update()
             
@@ -249,67 +249,65 @@ class DQN(base_agent):
 
 # TESTING ###################################################
 
-if __name__ == '__main__':
-    
-    # Set up the test params
-    state_dim = 2
-    action_num = 9
-    action_dim = 1
-    state = np.array([10, 2], dtype=np.int32)
-    reward = 2
-    done = False
-    replay_size = 5_000
-    
-    # Intialise the buffer
-    # buffer = None # A non existent buffer
-    # buffer = base_buffer() # buffer with unimplemented features
-    buffer = standard_replay_buffer(max_size=replay_size)
-    
-    # Initialise the agent
-    agent = DQN(state_dim=state_dim, 
-                action_num=action_num,
-                action_dim=action_dim,
-                replay_buffer=buffer,
-                target_update_method="hard", 
-                exploration_method="greedy"
-                ) 
-    
-    # Create an update loop 
-    print('Starting exploration: {}'.format(agent.policy.current_exploration))
-    for timestep in range(1, 10_000 + 1):        
+# Set up the test params
+state_dim = 2
+action_num = 9
+action_dim = 1
+state = np.array([10, 2], dtype=np.int32)
+reward = 2
+done = False
+replay_size = 5_000
 
-        # get an agent action
-        action = agent.get_action(state)
-                        
-        # push test samples to the replay buffer
-        buffer.push(state=state, action=action, 
-                    next_state=state, reward=reward, done=done)
-                        
-        # display the test parameters
-        if timestep % 1000 == 0:
-            print('\n------------------------------')
-            print('Steps {}'.format(timestep))
-            print('------------------------------')
-            print('Current buffer length {}'.format(buffer.get_length()))
-            print('Current action: {}/{}'.format(action[0], action_num - 1))
-            print('Exploration: {}'.format(agent.policy.current_exploration))
-            print('------------------------------')
-        
-        # update the agent's policy
-        agent.update()
+# Intialise the buffer
+# buffer = None # A non existent buffer
+# buffer = base_buffer() # buffer with unimplemented features
+buffer = standard_replay_buffer(max_size=replay_size)
+
+# Initialise the agent
+agent = DQN(state_dim=state_dim, 
+            action_num=action_num,
+            action_dim=action_dim,
+            replay_buffer=buffer,
+            target_update_method="hard", 
+            exploration_method="greedy"
+            ) 
+
+# Create an update loop 
+print('Starting exploration: {}'.format(agent.policy.current_exploration))
+for timestep in range(1, 10_000 + 1):        
+
+    # get an agent action
+    action = agent.get_action(state)
+                    
+    # push test samples to the replay buffer
+    buffer.push(state=state, action=action, 
+                next_state=state, reward=reward, done=done)
+                    
+    # display the test parameters
+    if timestep % 1000 == 0:
+        print('\n------------------------------')
+        print('Steps {}'.format(timestep))
+        print('------------------------------')
+        print('Current buffer length {}'.format(buffer.get_length()))
+        print('Current action: {}/{}'.format(action[0], action_num - 1))
+        print('Exploration: {}'.format(agent.policy.current_exploration))
+        print('------------------------------')
     
-    print('Selected action: {}/{}'.format(action[0], action_num - 1))
-    
-    # reset the agent parameters
-    agent.reset()
-    
-    print('\n------------------------------')
-    print('Completed')
-    print('------------------------------')
-    print('Reset buffer length {}'.format(buffer.get_length()))
-    print('Reset action: {}/{}'.format(action[0], action_num - 1))
-    print('Reset Exploration: {}'.format(agent.policy.current_exploration))
-    print('------------------------------')    
+    # update the agent's policy
+    agent.update()
+
+print('Selected action: {}/{}'.format(action[0], action_num - 1))
+
+# reset the agent parameters
+agent.reset()
+
+print('\n------------------------------')
+print('Completed')
+print('------------------------------')
+print('Reset buffer length {}'.format(buffer.get_length()))
+print('Reset action: {}/{}'.format(action[0], action_num - 1))
+print('Reset Exploration: {}'.format(agent.policy.current_exploration))
+print('------------------------------')   
     
 #################################################################
     
