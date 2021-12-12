@@ -128,6 +128,7 @@ class DQN(base_agent):
         self.starting_expl_threshold = starting_expl_threshold
         self.expl_decay_factor = expl_decay_factor
         self.min_expl_threshold = min_expl_threshold
+        self.current_exploration = starting_expl_threshold
         
         # Reset the policy, network and buffer components
         self.reset()
@@ -222,9 +223,10 @@ class DQN(base_agent):
         # For epsilon - greedy
         if self.exploration_method == "greedy":             
             action = self.policy.get_action(self.q_net, state)
-
+            
             # update the exploration params
             self.policy.update()
+            self.current_exploration = self.policy.current_exploration
             
             return action  
 
@@ -245,69 +247,71 @@ class DQN(base_agent):
         # load the target network
         self.target_q_net.load_state_dict(torch.load(path +'_target_q_network'))
         self.target_q_net.eval()
-
-
+        
+        
 # TESTING ###################################################
 
-# Set up the test params
-state_dim = 2
-action_num = 9
-action_dim = 1
-state = np.array([10, 2], dtype=np.int32)
-reward = 2
-done = False
-replay_size = 5_000
+if __name__ == "__main__":  
 
-# Intialise the buffer
-# buffer = None # A non existent buffer
-# buffer = base_buffer() # buffer with unimplemented features
-buffer = standard_replay_buffer(max_size=replay_size)
-
-# Initialise the agent
-agent = DQN(state_dim=state_dim, 
-            action_num=action_num,
-            action_dim=action_dim,
-            replay_buffer=buffer,
-            target_update_method="hard", 
-            exploration_method="greedy"
-            ) 
-
-# Create an update loop 
-print('Starting exploration: {}'.format(agent.policy.current_exploration))
-for timestep in range(1, 10_000 + 1):        
-
-    # get an agent action
-    action = agent.get_action(state)
-                    
-    # push test samples to the replay buffer
-    buffer.push(state=state, action=action, 
-                next_state=state, reward=reward, done=done)
-                    
-    # display the test parameters
-    if timestep % 1000 == 0:
-        print('\n------------------------------')
-        print('Steps {}'.format(timestep))
-        print('------------------------------')
-        print('Current buffer length {}'.format(buffer.get_length()))
-        print('Current action: {}/{}'.format(action[0], action_num - 1))
-        print('Exploration: {}'.format(agent.policy.current_exploration))
-        print('------------------------------')
+    # Set up the test params
+    state_dim = 2
+    action_num = 9
+    action_dim = 1
+    state = np.array([10, 2], dtype=np.int32)
+    reward = 2
+    done = False
+    replay_size = 5_000
     
-    # update the agent's policy
-    agent.update()
-
-print('Selected action: {}/{}'.format(action[0], action_num - 1))
-
-# reset the agent parameters
-agent.reset()
-
-print('\n------------------------------')
-print('Completed')
-print('------------------------------')
-print('Reset buffer length {}'.format(buffer.get_length()))
-print('Reset action: {}/{}'.format(action[0], action_num - 1))
-print('Reset Exploration: {}'.format(agent.policy.current_exploration))
-print('------------------------------')   
+    # Intialise the buffer
+    # buffer = None # A non existent buffer
+    # buffer = base_buffer() # buffer with unimplemented features
+    buffer = standard_replay_buffer(max_size=replay_size)
+    
+    # Initialise the agent
+    agent = DQN(state_dim=state_dim, 
+                action_num=action_num,
+                action_dim=action_dim,
+                replay_buffer=buffer,
+                target_update_method="hard", 
+                exploration_method="greedy"
+                ) 
+    
+    # Create an update loop 
+    print('Starting exploration: {}'.format(agent.policy.current_exploration))
+    for timestep in range(1, 10_000 + 1):        
+    
+        # get an agent action
+        action = agent.get_action(state)
+                        
+        # push test samples to the replay buffer
+        buffer.push(state=state, action=action, 
+                    next_state=state, reward=reward, done=done)
+                        
+        # display the test parameters
+        if timestep % 1000 == 0:
+            print('\n------------------------------')
+            print('Steps {}'.format(timestep))
+            print('------------------------------')
+            print('Current buffer length {}'.format(buffer.get_length()))
+            print('Current action: {}/{}'.format(action[0], action_num - 1))
+            print('Exploration: {}'.format(agent.current_exploration))
+            print('------------------------------')
+        
+        # update the agent's policy
+        agent.update()
+    
+    print('Selected action: {}/{}'.format(action[0], action_num - 1))
+    
+    # reset the agent parameters
+    agent.reset()
+    
+    print('\n------------------------------')
+    print('Completed')
+    print('------------------------------')
+    print('Reset buffer length {}'.format(buffer.get_length()))
+    print('Reset action: {}/{}'.format(action[0], action_num - 1))
+    print('Reset Exploration: {}'.format(agent.current_exploration))
+    print('------------------------------')   
     
 #################################################################
     
