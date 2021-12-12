@@ -200,17 +200,17 @@ class DQN(base_agent):
             loss.backward()
             self.optimiser.step()
             
-            # Update the target at the specified interval
-            if self.network_updates % self.target_update_freq == 0:
-    
-                # Perform a hard update 
-                if self.target_update_method == 'hard':
-                    self.target_q_net.load_state_dict(self.q_net.state_dict())
+            # Perform a hard update 
+            if self.target_update_method == 'hard':
+            
+                # Update the target at the specified interval
+                if self.network_updates % self.target_update_freq == 0:
+                        self.target_q_net.load_state_dict(self.q_net.state_dict())
                 
-                # Perform a soft update 
-                elif self.target_update_method == 'soft':
-                    for target_param, orig_param in zip(self.target_q_net.parameters(), self.q_net.parameters()):
-                        target_param.data.copy_(self.tau * orig_param.data + (1.0 - self.tau) * target_param.data)
+            # Perform a soft update 
+            elif self.target_update_method == 'soft':
+                for target_param, orig_param in zip(self.target_q_net.parameters(), self.q_net.parameters()):
+                    target_param.data.copy_(self.tau * orig_param.data + (1.0 - self.tau) * target_param.data)
             
             # Update the network update count
             self.network_updates += 1
