@@ -30,8 +30,10 @@ from AgentRL.common.buffers.standard_buffer import standard_replay_buffer
 
 class DQN(base_agent):
     
-    # TODO: test GPU functionality using the server
     # TODO: add compatibility for input_type
+    # TODO: print the hyperparameters on initialise
+    # TODO: add the following DQN variations: Double, Duelling, Prioritised, Noisy, Categorical, Rainbow
+    # TODO: test default DQN and Double DQN
     
     def __init__(self, 
                  
@@ -46,6 +48,7 @@ class DQN(base_agent):
                  device = 'cpu',
                  
                  # Hyperparameters
+                 algorithm_type='default',
                  hidden_dim = 32, 
                  batch_size = 32,
                  gamma = 0.99,
@@ -75,6 +78,12 @@ class DQN(base_agent):
         target_update_method_error = "target_update_method is not valid for this agent, " \
             + "please select one of the following: {}.".format(valid_target_update_methods)
         assert target_update_method in valid_target_update_methods, target_update_method_error
+        
+        # Ensure the algorithm type method is valid for DQN
+        valid_algorithm_methods = ["default", "double"]
+        algorithm_method_error = "algorithm_type is not valid for this agent, " \
+            + "please select one of the following: {}.".format(valid_algorithm_methods)
+        assert algorithm_type in valid_algorithm_methods, algorithm_method_error
         
         # Ensure the Exploration method is valid for DQN
         valid_exploration_methods = ["greedy"]
@@ -107,6 +116,7 @@ class DQN(base_agent):
         self.device = device
         
         # Set the hyperparameters 
+        self.algorithm_type = algorithm_type
         self.hidden_dim = hidden_dim
         self.batch_size = batch_size
         self.gamma = gamma
@@ -158,10 +168,15 @@ class DQN(base_agent):
         # Empty the replay buffer
         self.replay_buffer.reset()
         
-        # Reinitialise the networks and optimisers
+        # Initialise the networks
         self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device)   
-        self.target_q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
-        self.target_q_net.load_state_dict(self.q_net.state_dict())
+        
+        # Create a target network
+        if self.algorithm_type == "double":
+            self.target_q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
+            self.target_q_net.load_state_dict(self.q_net.state_dict())
+            
+        # Initialise the optimiser
         self.optimiser = torch.optim.Adam(self.q_net.parameters(), lr=self.learning_rate)          
                 
     def update(self):
@@ -184,8 +199,13 @@ class DQN(base_agent):
             # and take the Q value for the action that occured
             current_Q = self.q_net(state).gather(1, action)
             
-            # Use the Q network to predict the Q values for the next states
-            next_Q = self.target_q_net(next_state)
+            # Use the Q network to predict the Q values for the next states            
+            if self.algorithm_type == "default":
+                next_Q = self.q_net(next_state)
+            
+            # Use the target Q network to predict the Q values for the next states    
+            elif self.algorithm_type == "double":
+                next_Q = self.target_q_net(next_state)
             
             # Compute the updated Q value using:
             not_done = ~done
@@ -200,17 +220,20 @@ class DQN(base_agent):
             loss.backward()
             self.optimiser.step()
             
-            # Perform a hard update 
-            if self.target_update_method == 'hard':
+            # update the target network
+            if self.algorithm_type == "double":
             
-                # Update the target at the specified interval
-                if self.network_updates % self.target_update_freq == 0:
-                        self.target_q_net.load_state_dict(self.q_net.state_dict())
+                # Perform a hard update 
+                if self.target_update_method == 'hard':
                 
-            # Perform a soft update 
-            elif self.target_update_method == 'soft':
-                for target_param, orig_param in zip(self.target_q_net.parameters(), self.q_net.parameters()):
-                    target_param.data.copy_(self.tau * orig_param.data + (1.0 - self.tau) * target_param.data)
+                    # Update the target at the specified interval
+                    if self.network_updates % self.target_update_freq == 0:
+                            self.target_q_net.load_state_dict(self.q_net.state_dict())
+                    
+                # Perform a soft update 
+                elif self.target_update_method == 'soft':
+                    for target_param, orig_param in zip(self.target_q_net.parameters(), self.q_net.parameters()):
+                        target_param.data.copy_(self.tau * orig_param.data + (1.0 - self.tau) * target_param.data)
             
             # Update the network update count
             self.network_updates += 1
@@ -236,7 +259,8 @@ class DQN(base_agent):
         torch.save(self.q_net.state_dict(), path + '_q_network')
         
         # save the target network
-        torch.save(self.target_q_net.state_dict(), path + '_target_q_network')
+        if self.algorithm_type == "double":
+            torch.save(self.target_q_net.state_dict(), path + '_target_q_network')
         
     def load_model(self, path):
         
@@ -245,8 +269,9 @@ class DQN(base_agent):
         self.q_net.eval()
         
         # load the target network
-        self.target_q_net.load_state_dict(torch.load(path +'_target_q_network'))
-        self.target_q_net.eval()
+        if self.algorithm_type == "double":
+            self.target_q_net.load_state_dict(torch.load(path +'_target_q_network'))
+            self.target_q_net.eval()
         
         
 # TESTING ###################################################
@@ -273,7 +298,8 @@ if __name__ == "__main__":
                 action_dim=action_dim,
                 replay_buffer=buffer,
                 target_update_method="hard", 
-                exploration_method="greedy"
+                exploration_method="greedy",
+                algorithm_type="double"
                 ) 
     
     # Create an update loop 
