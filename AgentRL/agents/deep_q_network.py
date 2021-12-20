@@ -13,7 +13,7 @@ DQN - An implementation of a deep Q network originally introduced in:
 """
 
 from AgentRL.agents.base import base_agent
-from AgentRL.common.value_networks.standard_value_net import standard_value_network
+from AgentRL.common.value_networks.standard_value_net import standard_value_network, duelling_value_network
 from AgentRL.common.exploration.e_greedy import epsilon_greedy
 from AgentRL.common.buffers.base import base_buffer
 
@@ -32,8 +32,8 @@ class DQN(base_agent):
     
     # TODO: add compatibility for input_type
     # TODO: print the hyperparameters on initialise
-    # TODO: add the following DQN variations: Double, Duelling, Prioritised, Noisy, Categorical, Rainbow
-    # TODO: test default DQN and Double DQN
+    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised, Noisy, Categorical, Rainbow
+    # TODO: should they be able to implement a combination? e.g. Double and Duelling
     
     def __init__(self, 
                  
@@ -80,7 +80,7 @@ class DQN(base_agent):
         assert target_update_method in valid_target_update_methods, target_update_method_error
         
         # Ensure the algorithm type method is valid for DQN
-        valid_algorithm_methods = ["default", "double"]
+        valid_algorithm_methods = ["default", "double", "duelling"]
         algorithm_method_error = "algorithm_type is not valid for this agent, " \
             + "please select one of the following: {}.".format(valid_algorithm_methods)
         assert algorithm_type in valid_algorithm_methods, algorithm_method_error
@@ -168,12 +168,20 @@ class DQN(base_agent):
         # Empty the replay buffer
         self.replay_buffer.reset()
         
-        # Initialise the networks
-        self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device)   
-        
-        # Create a target network
-        if self.algorithm_type == "double":
+        # Initialise the default DQN network
+        if self.algorithm_type == "default":
+            self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
+            
+        # Initialise the double DQN networks
+        elif self.algorithm_type == "double":
+            self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
             self.target_q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
+            self.target_q_net.load_state_dict(self.q_net.state_dict())
+            
+        # Initialise the duelling DQN networks
+        elif self.algorithm_type == "duelling":
+            self.q_net = duelling_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
+            self.target_q_net = duelling_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the optimiser
@@ -204,7 +212,7 @@ class DQN(base_agent):
                 next_Q = self.q_net(next_state)
             
             # Use the target Q network to predict the Q values for the next states    
-            elif self.algorithm_type == "double":
+            elif self.algorithm_type == "double" or self.algorithm_type == "duelling":
                 next_Q = self.target_q_net(next_state)
             
             # Compute the updated Q value using:
@@ -221,7 +229,7 @@ class DQN(base_agent):
             self.optimiser.step()
             
             # update the target network
-            if self.algorithm_type == "double":
+            if self.algorithm_type == "double" or self.algorithm_type == "duelling":
             
                 # Perform a hard update 
                 if self.target_update_method == 'hard':
@@ -243,6 +251,10 @@ class DQN(base_agent):
                             
     def get_action(self, state): 
         
+        #  ensure that the batch dim is set to 1
+        if state.ndim < 2:
+            state = state.reshape(1, -1)
+        
         # For epsilon - greedy
         if self.exploration_method == "greedy":             
             action = self.policy.get_action(self.q_net, state)
@@ -259,7 +271,7 @@ class DQN(base_agent):
         torch.save(self.q_net.state_dict(), path + '_q_network')
         
         # save the target network
-        if self.algorithm_type == "double":
+        if self.algorithm_type == "double" or self.algorithm_type == "duelling":
             torch.save(self.target_q_net.state_dict(), path + '_target_q_network')
         
     def load_model(self, path):
@@ -269,7 +281,7 @@ class DQN(base_agent):
         self.q_net.eval()
         
         # load the target network
-        if self.algorithm_type == "double":
+        if self.algorithm_type == "double" or self.algorithm_type == "duelling":
             self.target_q_net.load_state_dict(torch.load(path +'_target_q_network'))
             self.target_q_net.eval()
         
@@ -299,7 +311,7 @@ if __name__ == "__main__":
                 replay_buffer=buffer,
                 target_update_method="hard", 
                 exploration_method="greedy",
-                algorithm_type="double"
+                algorithm_type="duelling"
                 ) 
     
     # Create an update loop 

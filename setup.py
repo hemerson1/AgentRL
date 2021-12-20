@@ -8,7 +8,7 @@ Created on Sat Nov 13 10:50:27 2021
 
 from setuptools import setup, find_packages
 
-VERSION = '0.0.6' 
+VERSION = '0.0.9' 
 DESCRIPTION = 'AgentRL'
 LONG_DESCRIPTION = 'A package containing several lightweight reinforcement learning agents'
 
@@ -23,8 +23,8 @@ setup(
         packages=find_packages(),
         install_requires=[
             'numpy==1.21.4',           
-	    'setuptools==58.0.4',
-	    'torch==1.10.0'            
+    	    'setuptools==58.0.4',
+    	    'torch==1.10.0'            
             ],        
         keywords=['reinforcement learning', 'agent'],
         classifiers= [
