@@ -83,6 +83,40 @@ class standard_replay_buffer(base_buffer):
         return len(self.buffer)        
     
     
+class prioritised_replay_buffer(base_buffer):
+    
+    def __init__(self, max_size=10_000):
+        
+        # A warning is appearing saying that list -> tensor conversion is slow
+        # However changing to list -> numpy -> tensor is much slower
+        warnings.filterwarnings("ignore", category=UserWarning) 
+        
+        # Initialise the buffer
+        self.buffer = []
+        
+        # Set the buffer parameters
+        self.max_size = max_size        
+        
+    def reset(self):
+        
+        # empty the buffer
+        self.buffer = []    
+
+    def push(self, state, action, reward, next_state, done, td_error):
+        
+        # add the most recent sample
+        self.buffer.append((state, action, reward, next_state, done, td_error))
+           
+        # trim list to the max size
+        if len(self.buffer) > self.max_size:
+            del self.buffer[0]
+                        
+    def sample(self, batch_size, device='cpu'):        
+        pass
+        
+    def get_length(self):
+        return len(self.buffer)  
+    
 # TESTING ###################################################
         
 if __name__ == '__main__':
