@@ -24,6 +24,7 @@ import torch.nn.functional as F
 
 # Testing:
 from AgentRL.common.buffers.standard_buffer import standard_replay_buffer
+from AgentRL.common.buffers.prioritised_buffer import prioritised_replay_buffer
 
 # Inspiration for the implementation was taken from:
 # https://github.com/seungeunrho/minimalRL/blob/master/dqn.py
@@ -125,6 +126,7 @@ class DQN(base_agent):
         
         # Set the replay buffer
         self.replay_buffer = replay_buffer
+        self.replay_buffer_name = replay_buffer.buffer_name
         
         # Set the update frequency
         self.target_update_method = target_update_method
@@ -194,7 +196,16 @@ class DQN(base_agent):
         
             # Sample a batch from the replay buffer
             if self.replay_buffer.get_length() > self.batch_size:
-                state, action, reward, next_state, done  = self.replay_buffer.sample(batch_size=self.batch_size, device=self.device)
+                
+                if self.replay_buffer_name == "default":
+                    state, action, next_state, reward, done  = self.replay_buffer.sample(batch_size=self.batch_size, device=self.device)
+                    
+                elif self.replay_buffer_name == "prioritised":
+                    
+                    # get a batch as well as idxs and importance sampling weights                    
+                    batch, idxs, is_weights = buffer.sample(batch_size=32)
+                    state, action, next_state, reward, done = batch      
+                    
             else:
                 return
             
@@ -216,12 +227,22 @@ class DQN(base_agent):
                 next_Q = self.target_q_net(next_state)
             
             # Compute the updated Q value using:
-            not_done = ~done
-            
+            not_done = ~done            
             target_Q = reward + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
             
+            # update the priority for the batch
+            if self.replay_buffer_name == "prioritised":
+                
+                # calculate the errors for the batch
+                errors = torch.abs(current_Q - target_Q).cpu().data.numpy()
+                self.replay_buffer.update_batch(batch_size=self.batch_size, errors=errors)
+            
             # Compute the loss - the MSE of the current and the expected Q value
-            loss = F.smooth_l1_loss(current_Q, target_Q)
+            if self.replay_buffer_name == "default":
+                loss = F.smooth_l1_loss(current_Q, target_Q)
+                
+            elif self.replay_buffer_name == "prioritised":                
+                loss = (is_weights * F.smooth_l1_loss(current_Q, target_Q)).mean()
             
             # Perform a gradient update        
             self.optimiser.zero_grad()
@@ -263,7 +284,48 @@ class DQN(base_agent):
             self.policy.update()
             self.current_exploration = self.policy.current_exploration
             
-            return action  
+            return action          
+        
+    def push(self, state, action, next_state, reward, done):
+        
+        if self.replay_buffer_name == "default":
+            
+            # update the buffer          
+            self.replay_buffer.push(state=state, action=action, next_state=next_state, reward=reward, done=done)
+            
+        elif self.replay_buffer_name == "prioritised":
+            
+            # TODO: converting to tensors twice seems like an oversight?
+            
+            # convert to tensors and adjust dimensions
+            state_tensor = torch.FloatTensor(state).to(self.device)[None, :]
+            next_state_tensor = torch.FloatTensor(next_state).to(self.device)[None, :]
+            action_tensor = torch.tensor(action).to(self.device)[None, :]
+            reward_tensor = torch.tensor(reward).to(self.device)
+            done_tensor = torch.tensor(done).to(self.device)
+            
+            # Use the Q network to predict the Q values for the current states 
+            # and take the Q value for the action that occured
+            current_Q = self.q_net(state_tensor).gather(1, action_tensor)
+            
+            if self.algorithm_type == "default":
+                next_Q = self.q_net(next_state_tensor)
+            
+            # Use the target Q network to predict the Q values for the next states    
+            elif self.algorithm_type == "double" or self.algorithm_type == "duelling":
+                next_Q = self.target_q_net(next_state_tensor)  
+                           
+            # Compute the updated Q value using:
+            not_done = ~done_tensor       
+            
+            target_Q = reward_tensor + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
+            
+            # calculate the error and convert to a 1D numpy array
+            error = torch.abs(current_Q - target_Q).cpu().data.numpy().squeeze(0)
+            
+            # update the buffer with the original numpy sample
+            self.replay_buffer.push(error=error, state=state, action=action, next_state=next_state, reward=reward, done=done)
+            
 
     def save_model(self, path):
         
@@ -302,7 +364,8 @@ if __name__ == "__main__":
     # Intialise the buffer
     # buffer = None # A non existent buffer
     # buffer = base_buffer() # buffer with unimplemented features
-    buffer = standard_replay_buffer(max_size=replay_size)
+    # buffer = standard_replay_buffer(max_size=replay_size)
+    buffer = prioritised_replay_buffer(max_size=replay_size)
     
     # Initialise the agent
     agent = DQN(state_dim=state_dim, 
@@ -322,9 +385,8 @@ if __name__ == "__main__":
         action = agent.get_action(state)
                         
         # push test samples to the replay buffer
-        buffer.push(state=state, action=action, 
-                    next_state=state, reward=reward, done=done)
-                        
+        agent.push(state=state, action=action, next_state=state, reward=reward, done=done)
+
         # display the test parameters
         if timestep % 1000 == 0:
             print('\n------------------------------')

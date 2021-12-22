@@ -42,15 +42,18 @@ class standard_replay_buffer(base_buffer):
         # Set the buffer parameters
         self.max_size = max_size        
         
+        # specify the buffer name
+        self.buffer_name = 'default'
+        
     def reset(self):
         
         # empty the buffer
         self.buffer = []        
 
-    def push(self, state, action, reward, next_state, done):
+    def push(self, state, action, next_state, reward, done):
         
         # add the most recent sample
-        self.buffer.append((state, action, reward, next_state, done))
+        self.buffer.append((state, action, next_state, reward, done))
            
         # trim list to the max size
         if len(self.buffer) > self.max_size:
@@ -60,7 +63,7 @@ class standard_replay_buffer(base_buffer):
         
         # get a batch and unpack it into its constituents
         batch = random.sample(self.buffer, batch_size)
-        state, action, reward, next_state, done = map(torch.tensor, zip(*batch))
+        state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
         
         # run the tensors on the selected device
         state = state.to(device)
@@ -77,45 +80,10 @@ class standard_replay_buffer(base_buffer):
         if len(action.size()) == 1: 
             action = action.unsqueeze(1)
         
-        return state, action, reward, next_state, done            
+        return state, action, next_state, reward, done            
         
     def get_length(self):
         return len(self.buffer)        
-    
-    
-class prioritised_replay_buffer(base_buffer):
-    
-    def __init__(self, max_size=10_000):
-        
-        # A warning is appearing saying that list -> tensor conversion is slow
-        # However changing to list -> numpy -> tensor is much slower
-        warnings.filterwarnings("ignore", category=UserWarning) 
-        
-        # Initialise the buffer
-        self.buffer = []
-        
-        # Set the buffer parameters
-        self.max_size = max_size        
-        
-    def reset(self):
-        
-        # empty the buffer
-        self.buffer = []    
-
-    def push(self, state, action, reward, next_state, done, td_error):
-        
-        # add the most recent sample
-        self.buffer.append((state, action, reward, next_state, done, td_error))
-           
-        # trim list to the max size
-        if len(self.buffer) > self.max_size:
-            del self.buffer[0]
-                        
-    def sample(self, batch_size, device='cpu'):        
-        pass
-        
-    def get_length(self):
-        return len(self.buffer)  
     
 # TESTING ###################################################
         
@@ -137,7 +105,8 @@ if __name__ == '__main__':
         buffer.push(state, next_state, action, reward, done)
         
         if i > 100_000:
-            print(buffer.buffer[-1])
+            # print(buffer.buffer[-1])
+            pass
         
     toc = time.perf_counter()
     print('Appending took {} seconds'.format(toc - tic))    
@@ -151,10 +120,11 @@ if __name__ == '__main__':
         state, action, _, _, done = buffer.sample(batch_size=32)
         
         if i % 1_000 == 0:
-            print(action)
-            print(type(action))
-            print(action.shape)
-            print('------------')
+            # print(action)
+            # print(type(action))
+            # print(action.shape)
+            # print('------------')
+            pass
         
     toc_1 = time.perf_counter()
     print('Sampling took {} seconds'.format(toc_1 - tic_1))    
