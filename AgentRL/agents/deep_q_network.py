@@ -22,9 +22,11 @@ import random
 import torch
 import torch.nn.functional as F
 
-# Testing:
+# TESTING:
 from AgentRL.common.buffers.standard_buffer import standard_replay_buffer
 from AgentRL.common.buffers.prioritised_buffer import prioritised_replay_buffer
+
+import time
 
 # Inspiration for the implementation was taken from:
 # https://github.com/seungeunrho/minimalRL/blob/master/dqn.py
@@ -35,6 +37,7 @@ class DQN(base_agent):
     # TODO: print the hyperparameters on initialise
     # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised, Noisy, Categorical, Rainbow
     # TODO: should they be able to implement a combination? e.g. Double and Duelling
+    # TODO: clean up prioritised replay
     
     def __init__(self, 
                  
@@ -230,18 +233,23 @@ class DQN(base_agent):
             not_done = ~done            
             target_Q = reward + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
             
-            # update the priority for the batch
-            if self.replay_buffer_name == "prioritised":
-                
-                # calculate the errors for the batch
-                errors = torch.abs(current_Q - target_Q).cpu().data.numpy()
-                self.replay_buffer.update_batch(batch_size=self.batch_size, errors=errors)
-            
             # Compute the loss - the MSE of the current and the expected Q value
             if self.replay_buffer_name == "default":
                 loss = F.smooth_l1_loss(current_Q, target_Q)
+            
+            # update the priority for the batch and compute the loss
+            elif self.replay_buffer_name == "prioritised":
                 
-            elif self.replay_buffer_name == "prioritised":                
+                # calculate the errors for the batch
+                errors = torch.abs(current_Q - target_Q).cpu().data.numpy()
+                
+                # TODO: fix this bug
+                
+                for i, error in enumerate(errors):
+                    self.replay_buffer.update(idxs[i], error)  
+                    
+                # self.replay_buffer.update_batch(batch_size=self.batch_size, errors=errors)
+                                
                 loss = (is_weights * F.smooth_l1_loss(current_Q, target_Q)).mean()
             
             # Perform a gradient update        
@@ -379,6 +387,11 @@ if __name__ == "__main__":
     
     # Create an update loop 
     print('Starting exploration: {}'.format(agent.policy.current_exploration))
+    
+    # test the algorithm speed   
+    tic = time.perf_counter()
+    orig_tic = tic
+    
     for timestep in range(1, 10_000 + 1):        
     
         # get an agent action
@@ -389,13 +402,19 @@ if __name__ == "__main__":
 
         # display the test parameters
         if timestep % 1000 == 0:
+            
+            toc = time.perf_counter()
+            
             print('\n------------------------------')
             print('Steps {}'.format(timestep))
             print('------------------------------')
             print('Current buffer length {}'.format(buffer.get_length()))
             print('Current action: {}/{}'.format(action[0], action_num - 1))
             print('Exploration: {}'.format(agent.current_exploration))
+            print('Completed in {} s'.format(toc - tic)) 
             print('------------------------------')
+            
+            tic = time.perf_counter()
         
         # update the agent's policy
         agent.update()
@@ -411,6 +430,7 @@ if __name__ == "__main__":
     print('Reset buffer length {}'.format(buffer.get_length()))
     print('Reset action: {}/{}'.format(action[0], action_num - 1))
     print('Reset Exploration: {}'.format(agent.current_exploration))
+    print('Completed in {} s'.format(toc - orig_tic)) 
     print('------------------------------')   
     
 #################################################################

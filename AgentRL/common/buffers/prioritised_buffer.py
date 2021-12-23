@@ -70,12 +70,10 @@ class prioritised_replay_buffer(base_buffer):
         p = self.get_priority(error)
         
         # create the sample and add it to the tree
-        self.tree.add(p, sample)
+        self.tree.add(p, sample) 
         
                         
     def sample(self, batch_size, device='cpu'):   
-
-        # TODO: optimise this -> focus on the for loop        
         
         batch, idxs, priorities = [], [], []
         
@@ -83,32 +81,23 @@ class prioritised_replay_buffer(base_buffer):
         segment = self.tree.total() / batch_size
         
         # update beta incremntally until it is 1
-        self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
-
-        # cycle through the batch
-        for i in range(batch_size):
-                        
-            # get a random continuous number between segments
-            sample = random.uniform(segment * i, segment * (i + 1))
-            
-            # get a sample with the greatest priority in that segment
-            idx, priority, data = self.tree.get(sample)
-            
-            # append to lists
-            priorities.append(priority)
-            batch.append(data)
-            idxs.append(idx)            
-                    
-        # divide each priority by the root node sum
-        sampling_probabilities = np.array(priorities) / self.tree.total()
+        self.beta = min(1., self.beta + self.beta_increment_per_sampling)
+        
+        # generate a range of samples
+        samples = [random.uniform(segment * i, segment * (i + 1)) for i in range(batch_size)]
+        
+        # get indexes, priorities and data from tree search
+        outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]
+        idxs, priorities, batch = zip(*outputs)
         
         # calculate importance sampling weights
-        is_weights = self.tree.current_size * sampling_probabilities ** (-self.beta)
-        is_weights /= is_weights.max()
+        tree_total, tree_size = self.tree.total(), self.tree.current_size        
+        is_weights = [tree_size * ((priority / tree_total) ** (-self.beta)) for _, priority in enumerate(priorities)]
+        is_weights_max = max([is_weights])[0]        
+        is_weights = [is_weight / is_weights_max for _, is_weight in enumerate(is_weights)]
         
-        # convert the batch into an appropriate form
+        # convert the batch into an appropriate tensor form        
         state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
-        is_weights = torch.FloatTensor(is_weights)
         
         # run the tensors on the selected device
         state = state.to(device)
@@ -116,6 +105,9 @@ class prioritised_replay_buffer(base_buffer):
         reward = reward.to(device)
         next_state = next_state.to(device)
         done = done.to(device)
+        
+        # convert importance sampling weights to tensor form
+        is_weights = torch.FloatTensor(is_weights)
         is_weights - is_weights.to(device)
         
         # make all the tensors 2D
@@ -128,9 +120,6 @@ class prioritised_replay_buffer(base_buffer):
         
         # repackage the batch
         batch_sample = (state, action, next_state, reward, done)
-        
-        # save the indexes
-        self.idxs = idxs
 
         return batch_sample, idxs, is_weights 
     
@@ -153,7 +142,7 @@ class prioritised_replay_buffer(base_buffer):
         for i in range(batch_size):
             idx = self.idxs[i]
             self.update(idx, errors[i])      
-        
+            
             
 class binary_sum_tree:
     
@@ -248,7 +237,7 @@ class binary_sum_tree:
         # follow the right node
         else:
             return self.retrieve(right, sample - self.tree[left])
-
+        
     
     def total(self):
         
