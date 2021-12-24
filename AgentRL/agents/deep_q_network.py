@@ -35,7 +35,7 @@ class DQN(base_agent):
     
     # TODO: add compatibility for input_type
     # TODO: print the hyperparameters on initialise
-    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised, Noisy, Categorical, Rainbow
+    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy, Categorical, Rainbow
     # TODO: should they be able to implement a combination? e.g. Double and Duelling
     
     def __init__(self, 
@@ -56,6 +56,7 @@ class DQN(base_agent):
                  batch_size = 32,
                  gamma = 0.99,
                  learning_rate = 1e-3,
+                 noisy = False,
                  
                  # Update
                  network_update_freq = 1,
@@ -144,6 +145,9 @@ class DQN(base_agent):
         self.min_expl_threshold = min_expl_threshold
         self.current_exploration = starting_expl_threshold
         
+        # configure the neural network
+        self.noisy = noisy
+        
         # Reset the policy, network and buffer components
         self.reset()
         
@@ -174,18 +178,23 @@ class DQN(base_agent):
         
         # Initialise the default DQN network
         if self.algorithm_type == "default":
-            self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
+            self.q_net = standard_value_network(self.state_dim, self.action_num,
+                                                hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
             
         # Initialise the double DQN networks
         elif self.algorithm_type == "double":
-            self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
-            self.target_q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
+            self.q_net = standard_value_network(self.state_dim, self.action_num,
+                                                hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
+            self.target_q_net = standard_value_network(self.state_dim, self.action_num,
+                                                       hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the duelling DQN networks
         elif self.algorithm_type == "duelling":
-            self.q_net = duelling_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
-            self.target_q_net = duelling_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim).to(self.device) 
+            self.q_net = duelling_value_network(self.state_dim, self.action_num,
+                                                hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
+            self.target_q_net = duelling_value_network(self.state_dim, self.action_num,
+                                                       hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the optimiser
@@ -279,15 +288,19 @@ class DQN(base_agent):
         if state.ndim < 2:
             state = state.reshape(1, -1)
         
+        # For noisy neural network exploration
+        if self.noisy:
+            action = self.policy.get_action(self.q_net, state)                   
+        
         # For epsilon - greedy
-        if self.exploration_method == "greedy":             
+        elif self.exploration_method == "greedy":         
             action = self.policy.get_action(self.q_net, state)
             
             # update the exploration params
             self.policy.update()
             self.current_exploration = self.policy.current_exploration
             
-            return action          
+        return action          
         
     def push(self, state, action, next_state, reward, done):
         
@@ -376,7 +389,8 @@ if __name__ == "__main__":
                 replay_buffer=buffer,
                 target_update_method="hard", 
                 exploration_method="greedy",
-                algorithm_type="duelling"
+                algorithm_type="duelling",
+                noisy=True
                 ) 
     
     # Create an update loop 

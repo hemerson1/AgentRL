@@ -86,13 +86,23 @@ class prioritised_replay_buffer(base_buffer):
         idxs, priorities, batch = zip(*outputs)
         
         # calculate importance sampling weights
-        tree_total, tree_size = self.tree.total(), self.tree.current_size        
-        is_weights = [tree_size * ((priority / tree_total) ** (-self.beta)) for _, priority in enumerate(priorities)]
+        tree_total, tree_size = self.tree.total(), self.tree.current_size     
+        
+        # Added a small 1e-8 factor to stop warning with zero priority
+        is_weights = [tree_size * (((priority + 1e-8) /tree_total) ** (-self.beta)) for _, priority in enumerate(priorities)]
         is_weights_max = max([is_weights])[0]        
         is_weights = [is_weight / is_weights_max for _, is_weight in enumerate(is_weights)]
         
-        # convert the batch into an appropriate tensor form    
-        state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
+        # TODO: fix this bug
+        # Error: a 0 is being added to the batch in place of a sample
+                
+        # convert the batch into an appropriate tensor form        
+        try: 
+            state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
+            
+        except TypeError:
+            print(batch)
+            print(len(batch))
         
         # run the tensors on the selected device
         state = state.to(device)

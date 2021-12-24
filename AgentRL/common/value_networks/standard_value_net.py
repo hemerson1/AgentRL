@@ -12,6 +12,7 @@ standard_value_network -  a simple feedforward value network
 """
 
 from AgentRL.common.value_networks.base import base_value_network
+from AgentRL.common.layers.custom_layers import factorised_noisy_linear_layer
 
 import torch
 import torch.nn as nn
@@ -22,14 +23,20 @@ import torch.nn.functional as F
 
 class standard_value_network(base_value_network):
     
-    def __init__(self, state_dim, action_dim, hidden_dim=64, activation=F.relu):   
+    def __init__(self, state_dim, action_dim, hidden_dim=64, activation=F.relu, noisy=False):   
         super().__init__()
         
         # initialise the layers
         self.linear_1 = nn.Linear(state_dim, hidden_dim)
-        self.linear_2 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear_3 = nn.Linear(hidden_dim, hidden_dim)
-        self.linear_4 = nn.Linear(hidden_dim, action_dim)   
+        
+        # specify the linear layer type
+        if noisy: linear_layer = factorised_noisy_linear_layer
+        else: linear_layer = nn.Linear
+        
+        # add the linear layers
+        self.linear_2 = linear_layer(hidden_dim, hidden_dim)
+        self.linear_3 = linear_layer(hidden_dim, hidden_dim)
+        self.linear_4 = linear_layer(hidden_dim, action_dim)    
         
         # get the activation function
         self.activation = activation
@@ -46,20 +53,26 @@ class standard_value_network(base_value_network):
     
 class duelling_value_network(base_value_network):
     
-    def __init__(self, state_dim, action_dim, hidden_dim=64, activation=F.relu):   
+    def __init__(self, state_dim, action_dim, hidden_dim=64, activation=F.relu, noisy=False):   
         super().__init__()
         
         # initialise the layers
         self.linear_1 = nn.Linear(state_dim, hidden_dim)
-        self.linear_2 = nn.Linear(hidden_dim, hidden_dim)
+        
+        # specify the linear layer type
+        if noisy: linear_layer = factorised_noisy_linear_layer
+        else: linear_layer = nn.Linear
+        
+        # add the linear layer
+        self.linear_2 = linear_layer(hidden_dim, hidden_dim)
             
         # Value function layers
-        self.value_1 = nn.Linear(hidden_dim, hidden_dim)
-        self.value_2 = nn.Linear(hidden_dim, 1)
+        self.value_1 = linear_layer(hidden_dim, hidden_dim)
+        self.value_2 = linear_layer(hidden_dim, 1)
         
         # Advantage function layers
-        self.advantage_1 = nn.Linear(hidden_dim, hidden_dim)
-        self.advantage_2 = nn.Linear(hidden_dim, action_dim)        
+        self.advantage_1 = linear_layer(hidden_dim, hidden_dim)
+        self.advantage_2 = linear_layer(hidden_dim, action_dim)        
         
         # get the activation function
         self.activation = activation
