@@ -37,7 +37,6 @@ class DQN(base_agent):
     # TODO: print the hyperparameters on initialise
     # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised, Noisy, Categorical, Rainbow
     # TODO: should they be able to implement a combination? e.g. Double and Duelling
-    # TODO: clean up prioritised replay
     
     def __init__(self, 
                  
@@ -206,7 +205,7 @@ class DQN(base_agent):
                 elif self.replay_buffer_name == "prioritised":
                     
                     # get a batch as well as idxs and importance sampling weights                    
-                    batch, idxs, is_weights = buffer.sample(batch_size=32)
+                    batch, idxs, is_weights = self.replay_buffer.sample(batch_size=32)
                     state, action, next_state, reward, done = batch      
                     
             else:
@@ -242,13 +241,9 @@ class DQN(base_agent):
                 
                 # calculate the errors for the batch
                 errors = torch.abs(current_Q - target_Q).cpu().data.numpy()
-                
-                # TODO: fix this bug
-                
+                                
                 for i, error in enumerate(errors):
                     self.replay_buffer.update(idxs[i], error)  
-                    
-                # self.replay_buffer.update_batch(batch_size=self.batch_size, errors=errors)
                                 
                 loss = (is_weights * F.smooth_l1_loss(current_Q, target_Q)).mean()
             
@@ -324,8 +319,7 @@ class DQN(base_agent):
                 next_Q = self.target_q_net(next_state_tensor)  
                            
             # Compute the updated Q value using:
-            not_done = ~done_tensor       
-            
+            not_done = ~done_tensor            
             target_Q = reward_tensor + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
             
             # calculate the error and convert to a 1D numpy array

@@ -17,7 +17,6 @@ from AgentRL.common.buffers.base import base_buffer
 import random
 import torch
 import warnings
-import numpy as np
 
 # TESTING 
 import time
@@ -26,9 +25,7 @@ import time
 # https://github.com/rlcode/per
 
 # TODO: consider a more permenant fix for conversion error
-# TODO: try and tidy up code
-# TODO: improve run time -> this buffer takes almost 3 times longer than standard
-# TODO: recommment this sum tree having read about it  
+# TODO: look for possible opitmisations
 
 class prioritised_replay_buffer(base_buffer):
     
@@ -74,9 +71,7 @@ class prioritised_replay_buffer(base_buffer):
         
                         
     def sample(self, batch_size, device='cpu'):   
-        
-        batch, idxs, priorities = [], [], []
-        
+                
         # divide the tree into segments
         segment = self.tree.total() / batch_size
         
@@ -96,7 +91,7 @@ class prioritised_replay_buffer(base_buffer):
         is_weights_max = max([is_weights])[0]        
         is_weights = [is_weight / is_weights_max for _, is_weight in enumerate(is_weights)]
         
-        # convert the batch into an appropriate tensor form        
+        # convert the batch into an appropriate tensor form    
         state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
         
         # run the tensors on the selected device
@@ -133,15 +128,7 @@ class prioritised_replay_buffer(base_buffer):
         
         # get the proprity 
         p = self.get_priority(error)
-        self.tree.update(idx, p)        
-    
-    # TODO: try and integrate this better    
-    def update_batch(self, batch_size, errors):
-        
-        # update the priority for the batch
-        for i in range(batch_size):
-            idx = self.idxs[i]
-            self.update(idx, errors[i])      
+        self.tree.update(idx, p)         
             
             
 class binary_sum_tree:
