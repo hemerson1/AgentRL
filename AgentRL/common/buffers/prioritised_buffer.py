@@ -17,6 +17,7 @@ from AgentRL.common.buffers.base import base_buffer
 import random
 import torch
 import warnings
+import numpy as np
 
 # TESTING 
 import time
@@ -29,14 +30,11 @@ import time
 
 class prioritised_replay_buffer(base_buffer):
     
-    def __init__(self, max_size=10_000, alpha=0.6, beta=0.4, beta_increment_per_sampling=0.001):
+    def __init__(self, max_size=10_000, seed=None, alpha=0.6, beta=0.4, beta_increment_per_sampling=0.001):
         
         # A warning is appearing saying that list -> tensor conversion is slow
         # However changing to list -> numpy -> tensor is much slower
         warnings.filterwarnings("ignore", category=UserWarning) 
-        
-        # Initialise the buffer
-        self.tree = binary_sum_tree(max_size=max_size)
         
         # Set the buffer parameters
         self.max_size = max_size        
@@ -53,7 +51,18 @@ class prioritised_replay_buffer(base_buffer):
         # once their error is zero
         self.epsilon = 0.01
         
+        # set the seed
+        self.seed = seed
+        
+        self.reset()
+        
     def reset(self):
+        
+        # reset the seeding
+        if type(self.seed) == int:
+            np.random.seed(self.seed)
+            torch.manual_seed(self.seed)
+            random.seed(self.seed)  
         
         # reinitialise the sum tree 
         self.tree = binary_sum_tree(max_size=self.max_size)     
@@ -73,13 +82,14 @@ class prioritised_replay_buffer(base_buffer):
     def sample(self, batch_size, device='cpu'):   
                 
         # divide the tree into segments
-        segment = self.tree.total() / batch_size
+        # added -1 to avoid sampling from otuside the data distribution
+        segment = (self.tree.total() - 1)/ batch_size
         
         # update beta incremntally until it is 1
         self.beta = min(1., self.beta + self.beta_increment_per_sampling)
         
         # generate a range of samples
-        samples = [random.uniform(segment * i, segment * (i + 1)) for i in range(batch_size)]
+        samples = [random.uniform(segment * i, segment * (i + 1)) for i in range(batch_size)]        
         
         # get indexes, priorities and data from tree search
         outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]
@@ -92,17 +102,9 @@ class prioritised_replay_buffer(base_buffer):
         is_weights = [tree_size * (((priority + 1e-8) /tree_total) ** (-self.beta)) for _, priority in enumerate(priorities)]
         is_weights_max = max([is_weights])[0]        
         is_weights = [is_weight / is_weights_max for _, is_weight in enumerate(is_weights)]
-        
-        # TODO: fix this bug
-        # Error: a 0 is being added to the batch in place of a sample
                 
         # convert the batch into an appropriate tensor form        
-        try: 
-            state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
-            
-        except TypeError:
-            print(batch)
-            print(len(batch))
+        state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
         
         # run the tensors on the selected device
         state = state.to(device)
@@ -212,6 +214,9 @@ class binary_sum_tree:
         
         # get the accompanying data
         dataIdx = idx - self.max_size + 1
+        
+        if dataIdx > self.write:
+            print('Taken from empty')
 
         return (idx, self.tree[idx], self.data[dataIdx])
     
@@ -227,7 +232,7 @@ class binary_sum_tree:
         if left >= len(self.tree):
             return idx
         
-        # if priority us less than left node follow left node
+        # if priority is less than left node follow left node
         if sample <= self.tree[left]:
             return self.retrieve(left, sample)
         

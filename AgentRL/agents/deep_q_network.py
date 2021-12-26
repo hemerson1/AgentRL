@@ -35,7 +35,7 @@ class DQN(base_agent):
     
     # TODO: add compatibility for input_type
     # TODO: print the hyperparameters on initialise
-    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy, Categorical, Rainbow
+    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy (DONE), Categorical, Rainbow
     # TODO: should they be able to implement a combination? e.g. Double and Duelling
     
     def __init__(self, 
