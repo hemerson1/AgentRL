@@ -65,15 +65,18 @@ class prioritised_replay_buffer(base_buffer):
             random.seed(self.seed)  
         
         # reinitialise the sum tree 
-        self.tree = binary_sum_tree(max_size=self.max_size)     
+        self.tree = binary_sum_tree(max_size=self.max_size)    
+        
+        # set the max priority
+        self.max_priority = 1
 
-    def push(self, error, state, action, next_state, reward, done):
+    def push(self, state, action, next_state, reward, done):
         
         # batch values together
         sample = (state, action, next_state, reward, done)
         
         # calculate the sample priority
-        p = self.get_priority(error)
+        p = self.max_priority #  self.get_priority(error)
         
         # create the sample and add it to the tree
         self.tree.add(p, sample) 
@@ -115,11 +118,12 @@ class prioritised_replay_buffer(base_buffer):
         
         # convert importance sampling weights to tensor form
         is_weights = torch.FloatTensor(is_weights)
-        is_weights - is_weights.to(device)
+        is_weights = is_weights.to(device)
         
         # make all the tensors 2D
         reward = reward.unsqueeze(1)
         done = done.unsqueeze(1)
+        is_weights = is_weights.unsqueeze(1)
         
         # check the dimension of the action and convert to 2D
         if len(action.size()) == 1: 
@@ -140,6 +144,11 @@ class prioritised_replay_buffer(base_buffer):
         
         # get the proprity 
         p = self.get_priority(error)
+        
+        # update the max_priority
+        if p > self.max_priority:
+            self.max_priority = p
+        
         self.tree.update(idx, p)         
             
             

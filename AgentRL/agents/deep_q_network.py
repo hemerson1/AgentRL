@@ -15,6 +15,7 @@ DQN - An implementation of a deep Q network originally introduced in:
 from AgentRL.agents.base import base_agent
 from AgentRL.common.value_networks.standard_value_net import standard_value_network, duelling_value_network
 from AgentRL.common.exploration.e_greedy import epsilon_greedy
+from AgentRL.common.exploration.argmax import default_argmax
 from AgentRL.common.buffers.base import base_buffer
 
 import numpy as np
@@ -28,15 +29,25 @@ from AgentRL.common.buffers.prioritised_buffer import prioritised_replay_buffer
 
 import time
 
-# Inspiration for the implementation was taken from:
+# Inspiration for basic DQN structure was taken from:
 # https://github.com/seungeunrho/minimalRL/blob/master/dqn.py
+
+# Guidance for categorical DQN structure was taken from:
+# https://github.com/Curt-Park/rainbow-is-all-you-need/blob/master/06.categorical_dqn.ipynb
+
+# Rainbow
+# https://github.com/maybe-hello-world/RainbowDQN/tree/newhope/Rainbow
+
 
 class DQN(base_agent):
     
     # TODO: add compatibility for input_type
     # TODO: print the hyperparameters on initialise
-    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy (DONE), Categorical, Rainbow
+    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy (DONE), Categorical (DONE), N step, Rainbow
     # TODO: should they be able to implement a combination? e.g. Double and Duelling
+    # TODO: hard to know distribution of V_min and V_max -> this can be solved with quantile rergression (Possibly the next step)
+    # TODO: observed an error where data was being taken from empty array entries -> this didn't break it so it may be incorrect
+    # TODO: ensure that PER, duelling and categorical all work together -> it seems to collapse?
     
     def __init__(self, 
                  
@@ -55,8 +66,7 @@ class DQN(base_agent):
                  hidden_dim = 32, 
                  batch_size = 32,
                  gamma = 0.99,
-                 learning_rate = 1e-3,
-                 noisy = False,
+                 learning_rate = 1e-3,                 
                  
                  # Update
                  network_update_freq = 1,
@@ -67,11 +77,18 @@ class DQN(base_agent):
                  # Replay 
                  replay_buffer = None,
                  
+                 # TODO: add noisy as an exploration method
+                 
                  # Exploration
                  exploration_method = "greedy",
                  starting_expl_threshold = 1.0,
                  expl_decay_factor = 0.999, 
-                 min_expl_threshold = 0.01
+                 min_expl_threshold = 0.01,
+                 
+                 # Categorical 
+                 categorical = False,
+                 v_range = (0, 100),
+                 atom_size = 50
                  
                  ):        
         
@@ -90,7 +107,7 @@ class DQN(base_agent):
         assert algorithm_type in valid_algorithm_methods, algorithm_method_error
         
         # Ensure the Exploration method is valid for DQN
-        valid_exploration_methods = ["greedy"]
+        valid_exploration_methods = ["greedy", "noisy_network"]
         exploration_method_error = "exploration_method is not valid for this agent, " \
             + "please select one of the following: {}.".format(valid_exploration_methods)
         assert exploration_method in valid_exploration_methods, exploration_method_error
@@ -145,8 +162,15 @@ class DQN(base_agent):
         self.min_expl_threshold = min_expl_threshold
         self.current_exploration = starting_expl_threshold
         
-        # configure the neural network
-        self.noisy = noisy
+        # Set noisy network parameters
+        self.noisy = False
+        
+        # Configure categorical structure
+        self.categorical = categorical
+        self.v_min, self.v_max = v_range
+        self.atom_size = atom_size
+        self.delta_z = float(self.v_max - self.v_min) / (self.atom_size - 1) 
+        self.support = None
         
         # Reset the policy, network and buffer components
         self.reset()
@@ -171,30 +195,46 @@ class DQN(base_agent):
                 starting_expl_threshold = self.starting_expl_threshold,
                 expl_decay_factor = self.expl_decay_factor, 
                 min_expl_threshold = self.min_expl_threshold                                        
-            )      
+            )  
+            
+        elif self.exploration_method == "noisy_network":
+            self.policy = default_argmax(
+                self.action_num,
+                self.device                                     
+            )  
+            self.noisy = True        
+            
+        # Reset the support for categorical DQN
+        if self.categorical:
+            self.support = torch.linspace(self.v_min, self.v_max, self.atom_size).to(self.device)
             
         # Empty the replay buffer
         self.replay_buffer.reset()
         
         # Initialise the default DQN network
         if self.algorithm_type == "default":
-            self.q_net = standard_value_network(self.state_dim, self.action_num,
-                                                hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
+            self.q_net = standard_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+                                                categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
+                                                atom_size=self.atom_size, support=self.support).to(self.device) 
             
         # Initialise the double DQN networks
         elif self.algorithm_type == "double":
-            self.q_net = standard_value_network(self.state_dim, self.action_num,
-                                                hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
-            self.target_q_net = standard_value_network(self.state_dim, self.action_num,
-                                                       hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
+            self.q_net = standard_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+                                                categorical=self.categorical, v_min=self.v_min, v_max=self.v_max, 
+                                                atom_size=self.atom_size, support=self.support).to(self.device) 
+            self.target_q_net = standard_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+                                                       categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
+                                                       atom_size=self.atom_size, support=self.support).to(self.device) 
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the duelling DQN networks
         elif self.algorithm_type == "duelling":
-            self.q_net = duelling_value_network(self.state_dim, self.action_num,
-                                                hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
-            self.target_q_net = duelling_value_network(self.state_dim, self.action_num,
-                                                       hidden_dim=self.hidden_dim, noisy=self.noisy).to(self.device) 
+            self.q_net = duelling_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+                                                categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
+                                                atom_size=self.atom_size, support=self.support).to(self.device) 
+            self.target_q_net = duelling_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+                                                       categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
+                                                       atom_size=self.atom_size, support=self.support).to(self.device) 
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the optimiser
@@ -225,36 +265,104 @@ class DQN(base_agent):
             state = state.type(torch.float32)
             next_state = next_state.type(torch.float32)
             
-            # Use the Q network to predict the Q values for the current states 
-            # and take the Q value for the action that occured
-            current_Q = self.q_net(state).gather(1, action)
-            
-            # Use the Q network to predict the Q values for the next states            
-            if self.algorithm_type == "default":
-                next_Q = self.q_net(next_state)
-            
-            # Use the target Q network to predict the Q values for the next states    
-            elif self.algorithm_type == "double" or self.algorithm_type == "duelling":
-                next_Q = self.target_q_net(next_state)
-            
-            # Compute the updated Q value using:
-            not_done = ~done            
-            target_Q = reward + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
-            
-            # Compute the loss - the MSE of the current and the expected Q value
-            if self.replay_buffer_name == "default":
-                loss = F.smooth_l1_loss(current_Q, target_Q)
-            
-            # update the priority for the batch and compute the loss
-            elif self.replay_buffer_name == "prioritised":
+            if self.categorical:
                 
-                # calculate the errors for the batch
-                errors = torch.abs(current_Q - target_Q).cpu().data.numpy()
+                with torch.no_grad():
+                    
+                    # Use the Q network to predict the next action and the distribution of returns
+                    if self.algorithm_type == 'default':                        
+                        next_action = self.q_net(next_state).argmax(1)
+                        next_distribution = self.q_net(next_state, get_distribution=True) 
+                        
+                    # Use the target Q network to predict the  next action and distribution of returns for the next states    
+                    elif self.algorithm_type == "double" or self.algorithm_type == "duelling": 
+                        next_action = self.target_q_net(next_state).argmax(1)                        
+                        next_distribution = self.target_q_net(next_state, get_distribution=True)                         
+                        
+                    next_distribution = next_distribution[range(self.batch_size), next_action]
+                    
+                    # perform a bellman update of the distribution of returns
+                    not_done = ~done
+                    z = (reward + not_done * self.gamma * self.support).clamp(min=self.v_min, max=self.v_max)
+                    
+                    # calculate the atom of each return and upper and lower bound
+                    b = (z - self.v_min) / self.delta_z
+                    l = b.floor().long()
+                    u = b.ceil().long()
+        
+                    # get the true atom structure
+                    offset = (
+                        torch.linspace(0, (self.batch_size - 1) * self.atom_size, self.batch_size
+                        ).long()
+                        .unsqueeze(1)
+                        .expand(self.batch_size, self.atom_size)
+                        .to(self.device)
+                    )
+        
+                    # determine the projected atom structure using the offset and predicted distribution
+                    proj_distribution = torch.zeros(next_distribution.size(), device=self.device)                    
+                    proj_distribution.view(-1).index_add_(
+                        0, (l + offset).view(-1), (next_distribution * (u.float() - b)).view(-1)
+                    )                    
+                    proj_distribution.view(-1).index_add_(
+                        0, (u + offset).view(-1), (next_distribution * (b - l.float())).view(-1)
+                    )
+                    
+                # get the distribution of log returns
+                distribution = self.q_net(state, get_distribution=True)  
+                
+                # Added squeeze to produce log_p with correct dimensions
+                log_p = torch.log(distribution[range(self.batch_size), action.squeeze(1)])
+                
+                # Compute the loss
+                if self.replay_buffer_name == "default":                    
+                    loss = -(proj_distribution * log_p).sum(1).mean()                    
+                
+                # update the priority for the batch and compute the loss
+                elif self.replay_buffer_name == "prioritised":
+
+                    # calculate the elementwise loss and factor in importance weights
+                    elementwise_loss = -(proj_distribution * log_p).sum(1)                    
+                    loss = (elementwise_loss * is_weights).mean()
+                    
+                    # update the errors for the batch
+                    errors = torch.abs(elementwise_loss).cpu().data.numpy()
+                                    
+                    for i, error in enumerate(errors):
+                        self.replay_buffer.update(idxs[i], error)  
+                    
+            else:            
+            
+                # Use the Q network to predict the Q values for the current states 
+                # and take the Q value for the action that occured
+                current_Q = self.q_net(state).gather(1, action)
+                
+                # Use the Q network to predict the Q values for the next states            
+                if self.algorithm_type == "default":
+                    next_Q = self.q_net(next_state)        
                                 
-                for i, error in enumerate(errors):
-                    self.replay_buffer.update(idxs[i], error)  
-                                
-                loss = (is_weights * F.smooth_l1_loss(current_Q, target_Q)).mean()
+                # Use the target Q network to predict the Q values for the next states    
+                elif self.algorithm_type == "double" or self.algorithm_type == "duelling":
+                    next_Q = self.target_q_net(next_state)
+                
+                # Compute the updated Q value using:
+                not_done = ~done            
+                target_Q = reward + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
+                
+                # Compute the loss - the MSE of the current and the expected Q value
+                if self.replay_buffer_name == "default":
+                    loss = F.smooth_l1_loss(current_Q, target_Q)
+                
+                # update the priority for the batch and compute the loss
+                elif self.replay_buffer_name == "prioritised":
+                    
+                    # calculate the errors for the batch
+                    errors = torch.abs(current_Q - target_Q).cpu().data.numpy()
+                                    
+                    for i, error in enumerate(errors):
+                        self.replay_buffer.update(idxs[i], error)  
+                                    
+                    loss = (is_weights * F.smooth_l1_loss(current_Q, target_Q)).mean()                    
             
             # Perform a gradient update        
             self.optimiser.zero_grad()
@@ -286,60 +394,24 @@ class DQN(base_agent):
         
         #  ensure that the batch dim is set to 1
         if state.ndim < 2:
-            state = state.reshape(1, -1)
-        
-        # For noisy neural network exploration
-        if self.noisy:
-            action = self.policy.get_action(self.q_net, state)                   
+            state = state.reshape(1, -1)                
         
         # For epsilon - greedy
-        elif self.exploration_method == "greedy":         
+        if self.exploration_method == "greedy":         
             action = self.policy.get_action(self.q_net, state)
             
             # update the exploration params
             self.policy.update()
             self.current_exploration = self.policy.current_exploration
             
+        # For noisy neural network exploration
+        elif self.exploration_method == "noisy_network":
+            action = self.policy.get_action(self.q_net, state)   
+            
         return action          
         
-    def push(self, state, action, next_state, reward, done):
-        
-        if self.replay_buffer_name == "default":
-            
-            # update the buffer          
-            self.replay_buffer.push(state=state, action=action, next_state=next_state, reward=reward, done=done)
-            
-        elif self.replay_buffer_name == "prioritised":
-            
-            # TODO: converting to tensors twice seems like an oversight?
-            
-            # convert to tensors and adjust dimensions
-            state_tensor = torch.FloatTensor(state).to(self.device)[None, :]
-            next_state_tensor = torch.FloatTensor(next_state).to(self.device)[None, :]
-            action_tensor = torch.tensor(action).to(self.device)[None, :]
-            reward_tensor = torch.tensor(reward).to(self.device)
-            done_tensor = torch.tensor(done).to(self.device)
-            
-            # Use the Q network to predict the Q values for the current states 
-            # and take the Q value for the action that occured
-            current_Q = self.q_net(state_tensor).gather(1, action_tensor)
-            
-            if self.algorithm_type == "default":
-                next_Q = self.q_net(next_state_tensor)
-            
-            # Use the target Q network to predict the Q values for the next states    
-            elif self.algorithm_type == "double" or self.algorithm_type == "duelling":
-                next_Q = self.target_q_net(next_state_tensor)  
-                           
-            # Compute the updated Q value using:
-            not_done = ~done_tensor            
-            target_Q = reward_tensor + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
-            
-            # calculate the error and convert to a 1D numpy array
-            error = torch.abs(current_Q - target_Q).cpu().data.numpy().squeeze(0)
-            
-            # update the buffer with the original numpy sample
-            self.replay_buffer.push(error=error, state=state, action=action, next_state=next_state, reward=reward, done=done)
+    def push(self, state, action, next_state, reward, done):        
+        self.replay_buffer.push(state=state, action=action, next_state=next_state, reward=reward, done=done)
             
 
     def save_model(self, path):
@@ -388,13 +460,14 @@ if __name__ == "__main__":
                 action_dim=action_dim,
                 replay_buffer=buffer,
                 target_update_method="hard", 
-                exploration_method="greedy",
-                algorithm_type="duelling",
-                noisy=True
+                exploration_method="noisy_network",
+                algorithm_type="default",
+                categorical=True
                 ) 
     
     # Create an update loop 
-    print('Starting exploration: {}'.format(agent.policy.current_exploration))
+    if agent.exploration_method == 'greedy':  
+        print('Starting exploration: {}'.format(agent.policy.current_exploration))
     
     # test the algorithm speed   
     tic = time.perf_counter()
@@ -418,7 +491,8 @@ if __name__ == "__main__":
             print('------------------------------')
             print('Current buffer length {}'.format(buffer.get_length()))
             print('Current action: {}/{}'.format(action[0], action_num - 1))
-            print('Exploration: {}'.format(agent.current_exploration))
+            if agent.exploration_method == 'greedy':            
+                print('Exploration: {}'.format(agent.current_exploration))
             print('Completed in {} s'.format(toc - tic)) 
             print('------------------------------')
             
@@ -437,7 +511,8 @@ if __name__ == "__main__":
     print('------------------------------')
     print('Reset buffer length {}'.format(buffer.get_length()))
     print('Reset action: {}/{}'.format(action[0], action_num - 1))
-    print('Reset Exploration: {}'.format(agent.current_exploration))
+    if agent.exploration_method == 'greedy':  
+        print('Reset Exploration: {}'.format(agent.current_exploration))
     print('Completed in {} s'.format(toc - orig_tic)) 
     print('------------------------------')   
     

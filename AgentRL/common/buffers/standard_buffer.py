@@ -17,6 +17,7 @@ from AgentRL.common.buffers.base import base_buffer
 import random
 import torch
 import warnings
+import numpy as np
 
 # TESTING 
 import time
@@ -28,7 +29,7 @@ import time
 
 class standard_replay_buffer(base_buffer):
     
-    def __init__(self, max_size=10_000):
+    def __init__(self, max_size=10_000, seed=None):
         
         # TODO: consider a more permenant fix for conversion error
         
@@ -45,7 +46,19 @@ class standard_replay_buffer(base_buffer):
         # specify the buffer name
         self.buffer_name = 'default'
         
+        # set the seed
+        self.seed = seed
+        
+        # reset to default
+        self.reset()
+        
     def reset(self):
+        
+        # reset the seeding
+        if type(self.seed) == int:
+            np.random.seed(self.seed)
+            torch.manual_seed(self.seed)
+            random.seed(self.seed)  
         
         # empty the buffer
         self.buffer = []        
