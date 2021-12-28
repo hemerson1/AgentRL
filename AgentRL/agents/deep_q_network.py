@@ -43,11 +43,10 @@ class DQN(base_agent):
     
     # TODO: add compatibility for input_type
     # TODO: print the hyperparameters on initialise
-    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy (DONE), Categorical (DONE), N step, Rainbow
+    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy (DONE), Categorical (DONE), N step (DONE), Rainbow
     # TODO: should they be able to implement a combination? e.g. Double and Duelling
     # TODO: hard to know distribution of V_min and V_max -> this can be solved with quantile rergression (Possibly the next step)
-    # TODO: observed an error where data was being taken from empty array entries -> this didn't break it so it may be incorrect
-    # TODO: ensure that PER, duelling and categorical all work together -> it seems to collapse?
+    # TODO: tidy up all the N step code
     
     def __init__(self, 
                  
@@ -77,8 +76,6 @@ class DQN(base_agent):
                  # Replay 
                  replay_buffer = None,
                  
-                 # TODO: add noisy as an exploration method
-                 
                  # Exploration
                  exploration_method = "greedy",
                  starting_expl_threshold = 1.0,
@@ -88,7 +85,10 @@ class DQN(base_agent):
                  # Categorical 
                  categorical = False,
                  v_range = (0, 100),
-                 atom_size = 50
+                 atom_size = 50,
+                 
+                 # Multi-step
+                 multi_step = 1
                  
                  ):        
         
@@ -172,6 +172,9 @@ class DQN(base_agent):
         self.delta_z = float(self.v_max - self.v_min) / (self.atom_size - 1) 
         self.support = None
         
+        # Set Multi-step parameters
+        self.multi_step = multi_step
+        
         # Reset the policy, network and buffer components
         self.reset()
         
@@ -189,6 +192,8 @@ class DQN(base_agent):
         
         # Reset the exploration
         if self.exploration_method == "greedy": 
+            
+            # load in e-greedy policy
             self.policy = epsilon_greedy(
                 self.action_num,
                 self.device,
@@ -198,10 +203,14 @@ class DQN(base_agent):
             )  
             
         elif self.exploration_method == "noisy_network":
+            
+            # load in argmax policy
             self.policy = default_argmax(
                 self.action_num,
                 self.device                                     
             )  
+            
+            # set network structure to noisy
             self.noisy = True        
             
         # Reset the support for categorical DQN
@@ -246,15 +255,17 @@ class DQN(base_agent):
         if self.current_step % self.network_update_freq == 0:
         
             # Sample a batch from the replay buffer
-            if self.replay_buffer.get_length() > self.batch_size:
+            if self.replay_buffer.get_length() > self.batch_size + (self.multi_step - 1):
                 
                 if self.replay_buffer_name == "default":
-                    state, action, next_state, reward, done  = self.replay_buffer.sample(batch_size=self.batch_size, device=self.device)
+                    state, action, next_state, reward, done  = self.replay_buffer.sample(batch_size=self.batch_size,
+                                                                                         device=self.device, multi_step=self.multi_step, gamma=self.gamma)
                     
                 elif self.replay_buffer_name == "prioritised":
                     
                     # get a batch as well as idxs and importance sampling weights                    
-                    batch, idxs, is_weights = self.replay_buffer.sample(batch_size=32)
+                    batch, idxs, is_weights = self.replay_buffer.sample(batch_size=self.batch_size, device=self.device,
+                                                                        multi_step=self.multi_step, gamma=self.gamma)
                     state, action, next_state, reward, done = batch      
                     
             else:
@@ -283,7 +294,7 @@ class DQN(base_agent):
                     
                     # perform a bellman update of the distribution of returns
                     not_done = ~done
-                    z = (reward + not_done * self.gamma * self.support).clamp(min=self.v_min, max=self.v_max)
+                    z = (reward + not_done * (self.gamma ** self.multi_step) * self.support).clamp(min=self.v_min, max=self.v_max)
                     
                     # calculate the atom of each return and upper and lower bound
                     b = (z - self.v_min) / self.delta_z
@@ -347,7 +358,7 @@ class DQN(base_agent):
                 
                 # Compute the updated Q value using:
                 not_done = ~done            
-                target_Q = reward + not_done * self.gamma * torch.max(next_Q, dim=1, keepdim=True).values
+                target_Q = reward + not_done * (self.gamma ** self.multi_step) * torch.max(next_Q, dim=1, keepdim=True).values
                 
                 # Compute the loss - the MSE of the current and the expected Q value
                 if self.replay_buffer_name == "default":
@@ -451,8 +462,8 @@ if __name__ == "__main__":
     # Intialise the buffer
     # buffer = None # A non existent buffer
     # buffer = base_buffer() # buffer with unimplemented features
-    # buffer = standard_replay_buffer(max_size=replay_size)
-    buffer = prioritised_replay_buffer(max_size=replay_size)
+    buffer = standard_replay_buffer(max_size=replay_size)
+    # buffer = prioritised_replay_buffer(max_size=replay_size)
     
     # Initialise the agent
     agent = DQN(state_dim=state_dim, 

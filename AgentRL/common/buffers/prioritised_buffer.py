@@ -68,7 +68,7 @@ class prioritised_replay_buffer(base_buffer):
         self.tree = binary_sum_tree(max_size=self.max_size)    
         
         # set the max priority
-        self.max_priority = 1
+        self.max_priority =  1 #1e-5
 
     def push(self, state, action, next_state, reward, done):
         
@@ -76,17 +76,18 @@ class prioritised_replay_buffer(base_buffer):
         sample = (state, action, next_state, reward, done)
         
         # calculate the sample priority
-        p = self.max_priority #  self.get_priority(error)
+        p = self.max_priority 
         
         # create the sample and add it to the tree
         self.tree.add(p, sample) 
         
                         
-    def sample(self, batch_size, device='cpu'):   
-                
+    def sample(self, batch_size, device='cpu', multi_step=1, gamma=0.99): 
+                        
         # divide the tree into segments
-        # added -1 to avoid sampling from otuside the data distribution
-        segment = (self.tree.total() - 1)/ batch_size
+        segment = self.tree.total() / batch_size
+        
+        # print(self.tree.total())
         
         # update beta incremntally until it is 1
         self.beta = min(1., self.beta + self.beta_increment_per_sampling)
@@ -95,19 +96,101 @@ class prioritised_replay_buffer(base_buffer):
         samples = [random.uniform(segment * i, segment * (i + 1)) for i in range(batch_size)]        
         
         # get indexes, priorities and data from tree search
-        outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]
-        idxs, priorities, batch = zip(*outputs)
+        outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]        
         
-        # calculate importance sampling weights
-        tree_total, tree_size = self.tree.total(), self.tree.current_size     
+        if multi_step > 1:
+            idxs, priorities, batch, data_idxs = zip(*outputs)
+            
+            count = 0
+            
+            # get the dones and rewards
+            next_state_indexes, done, reward = [], [], []                
+            
+            #print(data_idxs)
+            
+            for idx in data_idxs:
+                                
+                #print('Count: {} - Data idx: {}'.format(count, idx))
+                #print(self.tree.data[idx])
+                count += 1
+                
+                # get a range n_steps ahead for this sample
+                if idx + (multi_step - 1) >= self.max_size:                                        
+                    first_indexes = self.tree.data[idx:] 
+                    second_indexes = self.tree.data[: idx + (multi_step - 1) - self.max_size]
+                    index_range = first_indexes + second_indexes
+                else:
+                    index_range = self.tree.data[idx : min(idx + multi_step, self.tree.current_size)]   
+                
+                # unpackage the rewards and dones
+                n_step_sample = [(index[-2], index[-1]) for index in index_range]
+                
+                #print(n_step_sample)
+                #print('----------------------------')
+                
+                rewards, dones = map(list, zip(*n_step_sample))                
+                
+                #print(len(rewards))
+                
+                # cut the reward to the appropriate length
+                try: 
+                    done_index = dones.index(True) + 1 
+                    done_val = True
+                
+                except: 
+                    done_index = len(rewards) 
+                    done_val = False
+                
+                # udpdate the done_index if it will take data from overlap 
+                diff = self.tree.write - (done_index + idx)
+                if diff <= 0:
+                    
+                    #print('trimmed')
+                    
+                    done_index = done_index + diff - 1
+                    done_val = dones[done_index - 1]  
+                
+                # discount the rewards
+                rewards = rewards[:done_index]                
+                reward_val = sum([reward * (gamma ** idx) for idx, reward in enumerate(rewards)])
+                
+                #print(len(rewards))
+                
+                #print('next_state idx {}'.format(done_index + idx))
+                
+                # get the index for the next state before termination
+                next_state_indexes.append((done_index + idx) % self.max_size)
+                reward.append(reward_val)
+                done.append(done_val) 
+                
+            #print(next_state_indexes)
+                
+            # get the 0th state for the batch       
+            state, action, _, _, _ = map(torch.tensor, zip(*batch))
+            
+            # get the nth state
+            next_batch = [self.tree.data[idx] for idx in next_state_indexes]
+            
+            #print(next_batch)
+            #print('----------------------------')
+            _, _, next_state, _, _ = map(torch.tensor, zip(*next_batch))
+            
+            # convert to tensor
+            done = torch.tensor(done)
+            reward = torch.tensor(reward)
         
+        else:
+            idxs, priorities, batch, _ = zip(*outputs)   
+            
+            # convert the batch into an appropriate tensor form        
+            state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
+        
+        # calculate importance sampling weights        
         # Added a small 1e-8 factor to stop warning with zero priority
+        tree_total, tree_size = self.tree.total(), self.tree.current_size         
         is_weights = [tree_size * (((priority + 1e-8) /tree_total) ** (-self.beta)) for _, priority in enumerate(priorities)]
         is_weights_max = max([is_weights])[0]        
         is_weights = [is_weight / is_weights_max for _, is_weight in enumerate(is_weights)]
-                
-        # convert the batch into an appropriate tensor form        
-        state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
         
         # run the tensors on the selected device
         state = state.to(device)
@@ -149,7 +232,7 @@ class prioritised_replay_buffer(base_buffer):
         if p > self.max_priority:
             self.max_priority = p
         
-        self.tree.update(idx, p)         
+        self.tree.update(idx, p)        
             
             
 class binary_sum_tree:
@@ -223,11 +306,8 @@ class binary_sum_tree:
         
         # get the accompanying data
         dataIdx = idx - self.max_size + 1
-        
-        if dataIdx > self.write:
-            print('Taken from empty')
 
-        return (idx, self.tree[idx], self.data[dataIdx])
+        return (idx, self.tree[idx], self.data[dataIdx], dataIdx)
     
 
     # find sample on leaf node
@@ -272,7 +352,7 @@ if __name__ == '__main__':
         reward = random.randint(0, 10)
         done = False
         
-        buffer.push(error=1, state=state, action=action, next_state=state, reward=reward, done=done)
+        buffer.push(state=state, action=action, next_state=state, reward=reward, done=done)
         
         if i > 100_000:
             pass
@@ -287,7 +367,7 @@ if __name__ == '__main__':
     
     for i in range(10_000):
         
-        batch, idxs, is_weight = buffer.sample(batch_size=32)
+        batch, idxs, is_weight = buffer.sample(batch_size=32, multi_step=4)
         state, action, reward, next_state, done = batch        
         
         if i % 1_000 == 0:
