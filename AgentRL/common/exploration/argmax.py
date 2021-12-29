@@ -13,13 +13,13 @@ epsilon_greedy - Implementation of an epsilon greedy policy in which the agent
 
 """
 
-from AgentRL.common.exploration.base import base_exploration
+from AgentRL.common.exploration import base_exploration
 
 import numpy as np
 import torch
 
 # For testing:
-from AgentRL.common.value_networks.standard_value_net import standard_value_network
+from AgentRL.common.value_networks import standard_value_network
 
 class default_argmax(base_exploration):
     

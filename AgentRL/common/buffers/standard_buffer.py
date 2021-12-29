@@ -12,7 +12,7 @@ standard_replay_buffer - A simple replay buffer storing samples of data and
 
 """
 
-from AgentRL.common.buffers.base import base_buffer
+from AgentRL.common.buffers import base_buffer
 
 import random
 import torch

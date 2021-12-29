@@ -9,14 +9,21 @@ Created on Sat Nov 13 12:01:19 2021
 """ 
 DQN - An implementation of a deep Q network originally introduced in:
       https://arxiv.org/abs/1312.5602
+      
+Includes the following modifications:
+    - double
+    - duelling
+    - compatibility with prioritised replay
+    - noisy neural network learning
+    - categorical
+    - multi-step
+    - rainbow
 
 """
 
 from AgentRL.agents.base import base_agent
-from AgentRL.common.value_networks.standard_value_net import standard_value_network, duelling_value_network
-from AgentRL.common.exploration.e_greedy import epsilon_greedy
-from AgentRL.common.exploration.argmax import default_argmax
-from AgentRL.common.buffers.base import base_buffer
+from AgentRL.common.value_networks import standard_value_network, duelling_value_network
+from AgentRL.common.exploration import epsilon_greedy, default_argmax
 
 import numpy as np
 import random
@@ -24,8 +31,7 @@ import torch
 import torch.nn.functional as F
 
 # TESTING:
-from AgentRL.common.buffers.standard_buffer import standard_replay_buffer
-from AgentRL.common.buffers.prioritised_buffer import prioritised_replay_buffer
+from AgentRL.common.buffers import standard_replay_buffer, prioritised_replay_buffer
 
 import time
 
@@ -42,9 +48,6 @@ import time
 class DQN(base_agent):
     
     # TODO: add compatibility for input_type
-    # TODO: print the hyperparameters on initialise
-    # TODO: add the following DQN variations: Double (DONE), Duelling (DONE), Prioritised (DONE), Noisy (DONE), Categorical (DONE), N step (DONE), Rainbow
-    # TODO: should they be able to implement a combination? e.g. Double and Duelling
     # TODO: hard to know distribution of V_min and V_max -> this can be solved with quantile rergression (Possibly the next step)
     # TODO: tidy up all the N step code
     
@@ -101,7 +104,7 @@ class DQN(base_agent):
         assert target_update_method in valid_target_update_methods, target_update_method_error
         
         # Ensure the algorithm type method is valid for DQN
-        valid_algorithm_methods = ["default", "double", "duelling"]
+        valid_algorithm_methods = ["default", "double", "duelling", "rainbow"]
         algorithm_method_error = "algorithm_type is not valid for this agent, " \
             + "please select one of the following: {}.".format(valid_algorithm_methods)
         assert algorithm_type in valid_algorithm_methods, algorithm_method_error
@@ -112,18 +115,56 @@ class DQN(base_agent):
             + "please select one of the following: {}.".format(valid_exploration_methods)
         assert exploration_method in valid_exploration_methods, exploration_method_error
         
-        # Ensure the replay buffer is valid
-        test_buffer =  base_buffer
-        replay_buffer_error = "replay_buffer is invalid, please ensure a buffer from " \
-            + "'AgentRL/common/buffers' is utilised. If you are trying to implement a custom " \
-            + "buffer ensure that it is built inline with the template in base.py." 
-        assert isinstance(replay_buffer, test_buffer), replay_buffer_error
+        # Ensure the replay type is valid for DQN
+        valid_replays = ["default", "prioritised"]
+        replay_error = "replay is not valid for this agent, " \
+            + "please select one of the following: {}.".format(valid_replays)
+        assert replay_buffer.buffer_name in valid_replays, replay_error
         
         # Ensure the action_dim is correct
         action_dim_error = "action_dim is invalid, the current implementation only " \
             + "supports 1D action spaces."
         assert action_dim == 1, action_dim_error
         
+        # Display the input settings 
+        print('--------------------')
+        print('DQN SETTINGS:')
+        print('--------------------')
+        print('State dim: {}'.format(state_dim))    
+        print('Action dim: {}'.format(action_dim))  
+        print('Input type: {}'.format(input_type))      
+        print('Seed: {}'.format(seed))
+        print('Device: {}'.format(device))        
+        print('\nHyperparameters:')
+        print('--------------------')
+        print('Algorithm type: {}'.format(algorithm_type))
+        print('Hidden dimensions: {}'.format(hidden_dim))
+        print('Batch size: {}'.format(batch_size))
+        print('Discount factor: {}'.format(gamma))
+        print('Learning rate: {}'.format(learning_rate))
+        print('Steps per network update: {}'.format(network_update_freq))
+        print('Target Update Method: {}'.format(target_update_method))
+        if target_update_method == "hard":
+            print('Steps per target update: {}'.format(target_update_freq))        
+        if target_update_method == "soft":
+            print('Soft target update factor: {}'.format(tau))
+        print('Replay type: {}'.format(replay_buffer.buffer_name))
+        if algorithm_type == "rainbow":
+            print('Exploration Method: noisy_network')
+        else:
+            print('Exploration Method: {}'.format(exploration_method))
+        if exploration_method == "greedy" and algorithm_type != "rainbow":
+            print('Starting exploration: {}'.format(starting_expl_threshold))
+            print('Exploration decay factor: {}'.format(expl_decay_factor))
+            print('Minimum exploration: {}'.format(min_expl_threshold))
+        print('Categorical Learning: {}'.format(categorical))
+        if categorical or algorithm_type == "rainbow":
+            print('Value function range: {}'.format(v_range))
+            print('Categorical atom size: {}'.format(atom_size))
+        if multi_step > 1:
+            print('Multi-step learning: {}'.format(multi_step))
+        print('--------------------\n')
+                
         # Set the parameters of the environment
         self.state_dim = state_dim
         self.action_num = action_num
@@ -191,7 +232,7 @@ class DQN(base_agent):
         self.network_updates = 0 
         
         # Reset the exploration
-        if self.exploration_method == "greedy": 
+        if self.exploration_method == "greedy" and self.algorithm_type != "rainbow": 
             
             # load in e-greedy policy
             self.policy = epsilon_greedy(
@@ -202,7 +243,7 @@ class DQN(base_agent):
                 min_expl_threshold = self.min_expl_threshold                                        
             )  
             
-        elif self.exploration_method == "noisy_network":
+        elif self.exploration_method == "noisy_network" or self.algorithm_type == "rainbow":
             
             # load in argmax policy
             self.policy = default_argmax(
@@ -214,7 +255,7 @@ class DQN(base_agent):
             self.noisy = True        
             
         # Reset the support for categorical DQN
-        if self.categorical:
+        if self.categorical or self.algorithm_type == "rainbow":
             self.support = torch.linspace(self.v_min, self.v_max, self.atom_size).to(self.device)
             
         # Empty the replay buffer
@@ -237,7 +278,7 @@ class DQN(base_agent):
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the duelling DQN networks
-        elif self.algorithm_type == "duelling":
+        elif self.algorithm_type == "duelling" or self.algorithm_type == "rainbow":
             self.q_net = duelling_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
                                                 categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
                                                 atom_size=self.atom_size, support=self.support).to(self.device) 
@@ -276,7 +317,7 @@ class DQN(base_agent):
             state = state.type(torch.float32)
             next_state = next_state.type(torch.float32)
             
-            if self.categorical:
+            if self.categorical or self.algorithm_type == "rainbow":
                 
                 with torch.no_grad():
                     
@@ -286,7 +327,7 @@ class DQN(base_agent):
                         next_distribution = self.q_net(next_state, get_distribution=True) 
                         
                     # Use the target Q network to predict the  next action and distribution of returns for the next states    
-                    elif self.algorithm_type == "double" or self.algorithm_type == "duelling": 
+                    elif self.algorithm_type == "double" or self.algorithm_type == "duelling" or self.algorithm_type == "rainbow": 
                         next_action = self.target_q_net(next_state).argmax(1)                        
                         next_distribution = self.target_q_net(next_state, get_distribution=True)                         
                         
@@ -381,7 +422,7 @@ class DQN(base_agent):
             self.optimiser.step()
             
             # update the target network
-            if self.algorithm_type == "double" or self.algorithm_type == "duelling":
+            if self.algorithm_type == "double" or self.algorithm_type == "duelling" or self.algorithm_type == "rainbow":
             
                 # Perform a hard update 
                 if self.target_update_method == 'hard':
@@ -408,7 +449,7 @@ class DQN(base_agent):
             state = state.reshape(1, -1)                
         
         # For epsilon - greedy
-        if self.exploration_method == "greedy":         
+        if self.exploration_method == "greedy" and self.algorithm_type != "rainbow":         
             action = self.policy.get_action(self.q_net, state)
             
             # update the exploration params
@@ -416,7 +457,7 @@ class DQN(base_agent):
             self.current_exploration = self.policy.current_exploration
             
         # For noisy neural network exploration
-        elif self.exploration_method == "noisy_network":
+        elif self.exploration_method == "noisy_network" or self.algorithm_type == "rainbow":
             action = self.policy.get_action(self.q_net, state)   
             
         return action          
@@ -431,7 +472,7 @@ class DQN(base_agent):
         torch.save(self.q_net.state_dict(), path + '_q_network')
         
         # save the target network
-        if self.algorithm_type == "double" or self.algorithm_type == "duelling":
+        if self.algorithm_type == "double" or self.algorithm_type == "duelling" or self.algorithm_type == "rainbow":
             torch.save(self.target_q_net.state_dict(), path + '_target_q_network')
         
     def load_model(self, path):
@@ -441,7 +482,7 @@ class DQN(base_agent):
         self.q_net.eval()
         
         # load the target network
-        if self.algorithm_type == "double" or self.algorithm_type == "duelling":
+        if self.algorithm_type == "double" or self.algorithm_type == "duelling"  or self.algorithm_type == "rainbow":
             self.target_q_net.load_state_dict(torch.load(path +'_target_q_network'))
             self.target_q_net.eval()
         

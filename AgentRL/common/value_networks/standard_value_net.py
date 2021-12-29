@@ -11,8 +11,8 @@ standard_value_network -  a simple feedforward value network
 
 """
 
-from AgentRL.common.value_networks.base import base_value_network
-from AgentRL.common.layers.custom_layers import factorised_noisy_linear_layer
+from AgentRL.common.value_networks import base_value_network
+from AgentRL.common.layers import factorised_noisy_linear_layer
 
 import torch
 import torch.nn as nn

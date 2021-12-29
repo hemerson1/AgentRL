@@ -12,7 +12,7 @@ standard_replay_buffer - A simple replay buffer storing samples of data and
 
 """
 
-from AgentRL.common.buffers.base import base_buffer
+from AgentRL.common.buffers import base_buffer
 
 import random
 import torch
@@ -24,6 +24,9 @@ import time
 
 # The core structure of this buffer was inspired by:
 # https://github.com/rlcode/per
+
+# The multi-step implementation was guided by:
+# https://github.com/andri27-ts/Reinforcement-Learning/blob/master/Week3/buffers.py
 
 # TODO: consider a more permenant fix for conversion error
 # TODO: look for possible opitmisations
@@ -99,38 +102,24 @@ class prioritised_replay_buffer(base_buffer):
         outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]        
         
         if multi_step > 1:
+            
+            # get the current batch
             idxs, priorities, batch, data_idxs = zip(*outputs)
             
-            count = 0
-            
             # get the dones and rewards
-            next_state_indexes, done, reward = [], [], []                
-            
-            #print(data_idxs)
+            next_state_indexes, done, reward = [], [], []    
             
             for idx in data_idxs:
-                                
-                #print('Count: {} - Data idx: {}'.format(count, idx))
-                #print(self.tree.data[idx])
-                count += 1
                 
                 # get a range n_steps ahead for this sample
-                if idx + (multi_step - 1) >= self.max_size:                                        
-                    first_indexes = self.tree.data[idx:] 
-                    second_indexes = self.tree.data[: idx + (multi_step - 1) - self.max_size]
-                    index_range = first_indexes + second_indexes
+                if idx + (multi_step - 1) >= self.max_size: 
+                    index_range = self.tree.data[idx:]  + self.tree.data[: idx + (multi_step - 1) - self.max_size]
                 else:
                     index_range = self.tree.data[idx : min(idx + multi_step, self.tree.current_size)]   
                 
                 # unpackage the rewards and dones
-                n_step_sample = [(index[-2], index[-1]) for index in index_range]
-                
-                #print(n_step_sample)
-                #print('----------------------------')
-                
-                rewards, dones = map(list, zip(*n_step_sample))                
-                
-                #print(len(rewards))
+                n_step_sample = [(index[-2], index[-1]) for index in index_range]                
+                rewards, dones = map(list, zip(*n_step_sample))     
                 
                 # cut the reward to the appropriate length
                 try: 
@@ -143,36 +132,24 @@ class prioritised_replay_buffer(base_buffer):
                 
                 # udpdate the done_index if it will take data from overlap 
                 diff = self.tree.write - (done_index + idx)
-                if diff <= 0:
-                    
-                    #print('trimmed')
-                    
-                    done_index = done_index + diff - 1
+                if diff <= 0 and diff > -multi_step:        
+                    done_index = done_index + diff - 1                    
                     done_val = dones[done_index - 1]  
                 
                 # discount the rewards
                 rewards = rewards[:done_index]                
                 reward_val = sum([reward * (gamma ** idx) for idx, reward in enumerate(rewards)])
                 
-                #print(len(rewards))
-                
-                #print('next_state idx {}'.format(done_index + idx))
-                
                 # get the index for the next state before termination
                 next_state_indexes.append((done_index + idx) % self.max_size)
                 reward.append(reward_val)
                 done.append(done_val) 
-                
-            #print(next_state_indexes)
                 
             # get the 0th state for the batch       
             state, action, _, _, _ = map(torch.tensor, zip(*batch))
             
             # get the nth state
             next_batch = [self.tree.data[idx] for idx in next_state_indexes]
-            
-            #print(next_batch)
-            #print('----------------------------')
             _, _, next_state, _, _ = map(torch.tensor, zip(*next_batch))
             
             # convert to tensor
@@ -220,13 +197,13 @@ class prioritised_replay_buffer(base_buffer):
     def get_length(self):
         return self.tree.current_size
 
-    def get_priority(self, error):
+    def _get_priority(self, error):
         return (error + self.epsilon) ** self.alpha       
     
     def update(self, idx, error):
         
         # get the proprity 
-        p = self.get_priority(error)
+        p = self._get_priority(error)
         
         # update the max_priority
         if p > self.max_priority:
@@ -281,11 +258,11 @@ class binary_sum_tree:
         self.tree[idx] = priority
         
         # update all values to root node
-        self.propagate(idx, change)
+        self._propagate(idx, change)
         
         
     # update to the root node
-    def propagate(self, idx, change):
+    def _propagate(self, idx, change):
         
         # get the parent node
         parent = (idx - 1) // 2
@@ -295,14 +272,14 @@ class binary_sum_tree:
         
         # if this isn't the root node -> recursion
         if parent != 0:
-            self.propagate(parent, change)
+            self._propagate(parent, change)
             
             
     # get priority and sample
     def get(self, sample):
         
         # get the index
-        idx = self.retrieve(0, sample)
+        idx = self._retrieve(0, sample)
         
         # get the accompanying data
         dataIdx = idx - self.max_size + 1
@@ -311,7 +288,7 @@ class binary_sum_tree:
     
 
     # find sample on leaf node
-    def retrieve(self, idx, sample):
+    def _retrieve(self, idx, sample):
         
         # get the child nodes of the current node
         left = 2 * idx + 1
@@ -323,11 +300,11 @@ class binary_sum_tree:
         
         # if priority is less than left node follow left node
         if sample <= self.tree[left]:
-            return self.retrieve(left, sample)
+            return self._retrieve(left, sample)
         
         # follow the right node
         else:
-            return self.retrieve(right, sample - self.tree[left])
+            return self._retrieve(right, sample - self.tree[left])
         
     
     def total(self):
@@ -367,7 +344,7 @@ if __name__ == '__main__':
     
     for i in range(10_000):
         
-        batch, idxs, is_weight = buffer.sample(batch_size=32, multi_step=4)
+        batch, idxs, is_weight = buffer.sample(batch_size=32, multi_step=1)
         state, action, reward, next_state, done = batch        
         
         if i % 1_000 == 0:

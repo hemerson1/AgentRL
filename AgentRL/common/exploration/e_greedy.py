@@ -13,7 +13,7 @@ epsilon_greedy - Implementation of an epsilon greedy policy in which the agent
 
 """
 
-from AgentRL.common.exploration.base import base_exploration
+from AgentRL.common.exploration import base_exploration
 
 import numpy as np
 import torch
