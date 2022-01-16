@@ -26,21 +26,18 @@ class standard_value_network(base_value_network):
     # TODO: tidy up this structure
     
     def __init__(self, state_dim, action_dim, hidden_dim=64, activation=F.relu,
-                 noisy=False, categorical=False, v_min=None, v_max=0, atom_size=None, support=None):   
+                 noisy=False, categorical=False, v_min=None, v_max=0, atom_size=None, support=None, device=None):   
         super().__init__()
         
         # initialise the layers
         self.linear_1 = nn.Linear(state_dim, hidden_dim)
-        
-        # specify the linear layer type
-        if noisy: linear_layer = factorised_noisy_linear_layer
-        else: linear_layer = nn.Linear
         
         # initialise the categorical distirbution
         self.categorical = categorical
         self.v_min, self.v_max = v_min, v_max
         self.atom_size = atom_size
         self.support = support
+        self.device = device
         
         # specify the output dim for categorical
         if self.categorical:
@@ -48,11 +45,21 @@ class standard_value_network(base_value_network):
             self.action_dim = action_dim            
         else:
             output_dim = action_dim
+            
+        # specify the linear layer type
+        if noisy:
         
-        # add the linear layers
-        self.linear_2 = linear_layer(hidden_dim, hidden_dim)
-        self.linear_3 = linear_layer(hidden_dim, hidden_dim)
-        self.linear_4 = linear_layer(hidden_dim, output_dim)    
+            # add the linear layers
+            self.linear_2 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
+            self.linear_3 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
+            self.linear_4 = factorised_noisy_linear_layer(hidden_dim, output_dim, self.device)  
+        
+        else: 
+        
+            # add the linear layers
+            self.linear_2 = nn.Linear(hidden_dim, hidden_dim)
+            self.linear_3 = nn.Linear(hidden_dim, hidden_dim)
+            self.linear_4 = nn.Linear(hidden_dim, output_dim)    
         
         # get the activation function
         self.activation = activation
@@ -82,7 +89,7 @@ class standard_value_network(base_value_network):
 class duelling_value_network(base_value_network):
     
     def __init__(self, state_dim, action_dim, hidden_dim=64, activation=F.relu,
-                 noisy=False, categorical=False, v_min=None, v_max=0, atom_size=None, support=None):   
+                 noisy=False, categorical=False, v_min=None, v_max=0, atom_size=None, support=None, device=None):   
         super().__init__()
         
         # initialise the layers
@@ -93,6 +100,7 @@ class duelling_value_network(base_value_network):
         self.v_min, self.v_max = v_min, v_max
         self.atom_size = atom_size
         self.support = support
+        self.device = device
         
         # specify the output dim for categorical
         output_dim = action_dim
@@ -101,19 +109,31 @@ class duelling_value_network(base_value_network):
             self.action_dim = action_dim                        
         
         # specify the linear layer type
-        if noisy: linear_layer = factorised_noisy_linear_layer
-        else: linear_layer = nn.Linear
-        
-        # add the linear layer
-        self.linear_2 = linear_layer(hidden_dim, hidden_dim)
+        if noisy: 
             
-        # Value function layers
-        self.value_1 = linear_layer(hidden_dim, hidden_dim)
-        self.value_2 = linear_layer(hidden_dim, 1)
+            # add the linear layer
+            self.linear_2 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
+                
+            # Value function layers
+            self.value_1 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
+            self.value_2 = factorised_noisy_linear_layer(hidden_dim, 1, self.device)
+            
+            # Advantage function layers
+            self.advantage_1 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
+            self.advantage_2 = factorised_noisy_linear_layer(hidden_dim, output_dim, self.device)  
+            
+        else:
         
-        # Advantage function layers
-        self.advantage_1 = linear_layer(hidden_dim, hidden_dim)
-        self.advantage_2 = linear_layer(hidden_dim, output_dim)        
+            # add the linear layer
+            self.linear_2 = nn.Linear(hidden_dim, hidden_dim)
+                
+            # Value function layers
+            self.value_1 = nn.Linear(hidden_dim, hidden_dim)
+            self.value_2 = nn.Linear(hidden_dim, 1)
+            
+            # Advantage function layers
+            self.advantage_1 = nn.Linear(hidden_dim, hidden_dim)
+            self.advantage_2 = nn.Linear(hidden_dim, output_dim)        
         
         # get the activation function
         self.activation = activation

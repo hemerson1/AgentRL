@@ -50,6 +50,7 @@ class DQN(base_agent):
     # TODO: add compatibility for input_type
     # TODO: hard to know distribution of V_min and V_max -> this can be solved with quantile rergression (Possibly the next step)
     # TODO: tidy up all the N step code
+    # TODO: make sure the action_num is compatible with the numpy array format of the SimpleRL environments
     
     def __init__(self, 
                  
@@ -247,8 +248,8 @@ class DQN(base_agent):
             
             # load in argmax policy
             self.policy = default_argmax(
-                self.action_num,
-                self.device                                     
+                action_num=self.action_num,
+                device=self.device                                     
             )  
             
             # set network structure to noisy
@@ -263,28 +264,28 @@ class DQN(base_agent):
         
         # Initialise the default DQN network
         if self.algorithm_type == "default":
-            self.q_net = standard_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+            self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim, noisy=self.noisy,
                                                 categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
-                                                atom_size=self.atom_size, support=self.support).to(self.device) 
+                                                atom_size=self.atom_size, support=self.support, device=self.device).to(self.device) 
             
         # Initialise the double DQN networks
         elif self.algorithm_type == "double":
-            self.q_net = standard_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+            self.q_net = standard_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim, noisy=self.noisy,
                                                 categorical=self.categorical, v_min=self.v_min, v_max=self.v_max, 
-                                                atom_size=self.atom_size, support=self.support).to(self.device) 
+                                                atom_size=self.atom_size, support=self.support, device=self.device).to(self.device) 
             self.target_q_net = standard_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
                                                        categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
-                                                       atom_size=self.atom_size, support=self.support).to(self.device) 
+                                                       atom_size=self.atom_size, support=self.support, device=self.device).to(self.device) 
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the duelling DQN networks
         elif self.algorithm_type == "duelling" or self.algorithm_type == "rainbow":
-            self.q_net = duelling_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+            self.q_net = duelling_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim, noisy=self.noisy,
                                                 categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
-                                                atom_size=self.atom_size, support=self.support).to(self.device) 
-            self.target_q_net = duelling_value_network(self.state_dim, self.action_num,hidden_dim=self.hidden_dim, noisy=self.noisy,
+                                                atom_size=self.atom_size, support=self.support, device=self.device).to(self.device) 
+            self.target_q_net = duelling_value_network(self.state_dim, self.action_num, hidden_dim=self.hidden_dim, noisy=self.noisy,
                                                        categorical=self.categorical, v_min=self.v_min, v_max=self.v_max,
-                                                       atom_size=self.atom_size, support=self.support).to(self.device) 
+                                                       atom_size=self.atom_size, support=self.support, device=self.device).to(self.device) 
             self.target_q_net.load_state_dict(self.q_net.state_dict())
             
         # Initialise the optimiser

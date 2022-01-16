@@ -35,7 +35,7 @@ class default_argmax(base_exploration):
         # convert to tensor and select argmax
         tensor_state = torch.FloatTensor(state).to(self.device)
         with torch.no_grad():
-            action = torch.argmax(value_network(tensor_state)).unsqueeze(0).to(self.device)
+            action = torch.argmax(value_network(tensor_state)).unsqueeze(0)
             action = action.cpu().data.numpy()
                 
         return action

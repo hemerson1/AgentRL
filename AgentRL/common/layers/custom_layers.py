@@ -22,18 +22,19 @@ import math
 
 class factorised_noisy_linear_layer(nn.Module):
 
-    def __init__(self, num_in, num_out, is_training=True):
+    def __init__(self, num_in, num_out, is_training=True, device='cpu'):
         super(factorised_noisy_linear_layer, self).__init__()
         self.num_in = num_in
         self.num_out = num_out 
         self.is_training = is_training
+        self.device = device
 
-        self.mu_weight = nn.Parameter(torch.FloatTensor(num_out, num_in))
-        self.mu_bias = nn.Parameter(torch.FloatTensor(num_out)) 
-        self.sigma_weight = nn.Parameter(torch.FloatTensor(num_out, num_in))
+        self.mu_weight = nn.Parameter(torch.FloatTensor(num_out, num_in).to(self.device))
+        self.mu_bias = nn.Parameter(torch.FloatTensor(num_out).to(self.device)) 
+        self.sigma_weight = nn.Parameter(torch.FloatTensor(num_out, num_in).to(self.device))
         self.sigma_bias = nn.Parameter(torch.FloatTensor(num_out))
-        self.register_buffer("epsilon_i", torch.FloatTensor(num_in))
-        self.register_buffer("epsilon_j", torch.FloatTensor(num_out))
+        self.register_buffer("epsilon_i", torch.FloatTensor(num_in).to(self.device))
+        self.register_buffer("epsilon_j", torch.FloatTensor(num_out).to(self.device))
 
         self.reset_parameters()
         self.reset_noise()
@@ -63,7 +64,7 @@ class factorised_noisy_linear_layer(nn.Module):
         self.sigma_bias.data.fill_(0.5 / math.sqrt(self.num_in))
 
     def reset_noise(self):
-        eps_i = torch.randn(self.num_in)
-        eps_j = torch.randn(self.num_out)
+        eps_i = torch.randn(self.num_in).to(self.device)
+        eps_j = torch.randn(self.num_out).to(self.device)
         self.epsilon_i = eps_i.sign() * (eps_i.abs()).sqrt()
         self.epsilon_j = eps_j.sign() * (eps_j.abs()).sqrt()
