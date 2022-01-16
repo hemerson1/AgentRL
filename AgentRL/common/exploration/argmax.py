@@ -15,7 +15,6 @@ epsilon_greedy - Implementation of an epsilon greedy policy in which the agent
 
 from AgentRL.common.exploration import base_exploration
 
-import numpy as np
 import torch
 
 # For testing:
@@ -36,7 +35,7 @@ class default_argmax(base_exploration):
         # convert to tensor and select argmax
         tensor_state = torch.FloatTensor(state).to(self.device)
         with torch.no_grad():
-            action = torch.argmax(value_network(tensor_state)).unsqueeze(0)
+            action = torch.argmax(value_network(tensor_state)).unsqueeze(0).to(self.device)
             action = action.cpu().data.numpy()
                 
         return action

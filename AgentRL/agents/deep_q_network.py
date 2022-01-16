@@ -498,13 +498,13 @@ if __name__ == "__main__":
     state = np.array([10, 2], dtype=np.int32)
     reward = 2
     done = False
-    replay_size = 5_000
+    replay_size = 10_000
     
     # Intialise the buffer
     # buffer = None # A non existent buffer
     # buffer = base_buffer() # buffer with unimplemented features
-    buffer = standard_replay_buffer(max_size=replay_size)
-    # buffer = prioritised_replay_buffer(max_size=replay_size)
+    # buffer = standard_replay_buffer(max_size=replay_size)
+    buffer = prioritised_replay_buffer(max_size=replay_size, seed=0)
     
     # Initialise the agent
     agent = DQN(state_dim=state_dim, 
@@ -514,7 +514,8 @@ if __name__ == "__main__":
                 target_update_method="hard", 
                 exploration_method="noisy_network",
                 algorithm_type="default",
-                categorical=True
+                categorical=False, 
+                seed=0
                 ) 
     
     # Create an update loop 

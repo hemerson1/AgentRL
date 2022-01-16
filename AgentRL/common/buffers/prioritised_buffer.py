@@ -71,8 +71,8 @@ class prioritised_replay_buffer(base_buffer):
         self.tree = binary_sum_tree(max_size=self.max_size)    
         
         # set the max priority
-        self.max_priority =  1 #1e-5
-
+        self.max_priority = 1
+        
     def push(self, state, action, next_state, reward, done):
         
         # batch values together
@@ -90,13 +90,11 @@ class prioritised_replay_buffer(base_buffer):
         # divide the tree into segments
         segment = self.tree.total() / batch_size
         
-        # print(self.tree.total())
-        
-        # update beta incremntally until it is 1
+        # update beta incrementally until it is 1
         self.beta = min(1., self.beta + self.beta_increment_per_sampling)
         
-        # generate a range of samples
-        samples = [random.uniform(segment * i, segment * (i + 1)) for i in range(batch_size)]        
+        # generate a range of samples (need to cap priority at the current max)
+        samples = [random.uniform(segment * i, min(segment * (i + 1), self.max_priority)) for i in range(batch_size)]        
         
         # get indexes, priorities and data from tree search
         outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]        
@@ -157,11 +155,11 @@ class prioritised_replay_buffer(base_buffer):
             reward = torch.tensor(reward)
         
         else:
-            idxs, priorities, batch, _ = zip(*outputs)   
+            idxs, priorities, batch, _ = zip(*outputs)              
             
             # convert the batch into an appropriate tensor form        
             state, action, next_state, reward, done = map(torch.tensor, zip(*batch))
-        
+                    
         # calculate importance sampling weights        
         # Added a small 1e-8 factor to stop warning with zero priority
         tree_total, tree_size = self.tree.total(), self.tree.current_size         
@@ -230,7 +228,7 @@ class binary_sum_tree:
     def add(self, priority, data):
         
         # get the data index (fill from the end)
-        idx = self.write + self.max_size - 1
+        idx = self.write + (self.max_size - 1)
         
         # set the data
         self.data[self.write] = data
