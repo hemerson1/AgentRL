@@ -22,7 +22,7 @@ import math
 
 class factorised_noisy_linear_layer(nn.Module):
 
-    def __init__(self, num_in, num_out, is_training=True, device='cpu'):
+    def __init__(self, num_in, num_out, is_training=True, device=None):
         super(factorised_noisy_linear_layer, self).__init__()
         self.num_in = num_in
         self.num_out = num_out 
@@ -32,7 +32,7 @@ class factorised_noisy_linear_layer(nn.Module):
         self.mu_weight = nn.Parameter(torch.FloatTensor(num_out, num_in).to(self.device))
         self.mu_bias = nn.Parameter(torch.FloatTensor(num_out).to(self.device)) 
         self.sigma_weight = nn.Parameter(torch.FloatTensor(num_out, num_in).to(self.device))
-        self.sigma_bias = nn.Parameter(torch.FloatTensor(num_out))
+        self.sigma_bias = nn.Parameter(torch.FloatTensor(num_out).to(self.device))
         self.register_buffer("epsilon_i", torch.FloatTensor(num_in).to(self.device))
         self.register_buffer("epsilon_j", torch.FloatTensor(num_out).to(self.device))
 

@@ -50,9 +50,9 @@ class standard_value_network(base_value_network):
         if noisy:
         
             # add the linear layers
-            self.linear_2 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
-            self.linear_3 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
-            self.linear_4 = factorised_noisy_linear_layer(hidden_dim, output_dim, self.device)  
+            self.linear_2 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, device=self.device)
+            self.linear_3 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, device=self.device)
+            self.linear_4 = factorised_noisy_linear_layer(hidden_dim, output_dim, device=self.device)  
         
         else: 
         
@@ -112,15 +112,15 @@ class duelling_value_network(base_value_network):
         if noisy: 
             
             # add the linear layer
-            self.linear_2 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
+            self.linear_2 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, device=self.device)
                 
             # Value function layers
-            self.value_1 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
-            self.value_2 = factorised_noisy_linear_layer(hidden_dim, 1, self.device)
+            self.value_1 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, device=self.device)
+            self.value_2 = factorised_noisy_linear_layer(hidden_dim, 1, device=self.device)
             
             # Advantage function layers
-            self.advantage_1 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, self.device)
-            self.advantage_2 = factorised_noisy_linear_layer(hidden_dim, output_dim, self.device)  
+            self.advantage_1 = factorised_noisy_linear_layer(hidden_dim, hidden_dim, device=self.device)
+            self.advantage_2 = factorised_noisy_linear_layer(hidden_dim, output_dim, device=self.device)  
             
         else:
         

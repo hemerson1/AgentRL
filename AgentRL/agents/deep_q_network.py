@@ -48,7 +48,7 @@ import time
 class DQN(base_agent):
     
     # TODO: add compatibility for input_type
-    # TODO: hard to know distribution of V_min and V_max -> this can be solved with quantile rergression (Possibly the next step)
+    # TODO: hard to know distribution of V_min and V_max -> this can be solved with quantile regression (Possibly the next step)
     # TODO: tidy up all the N step code
     # TODO: make sure the action_num is compatible with the numpy array format of the SimpleRL environments
     
@@ -127,6 +127,9 @@ class DQN(base_agent):
             + "supports 1D action spaces."
         assert action_dim == 1, action_dim_error
         
+        # Amend the inputs to match with rainbow
+        if algorithm_type == "rainbow": categorical = True
+        
         # Display the input settings 
         print('--------------------')
         print('DQN SETTINGS:')
@@ -159,7 +162,7 @@ class DQN(base_agent):
             print('Exploration decay factor: {}'.format(expl_decay_factor))
             print('Minimum exploration: {}'.format(min_expl_threshold))
         print('Categorical Learning: {}'.format(categorical))
-        if categorical or algorithm_type == "rainbow":
+        if categorical:
             print('Value function range: {}'.format(v_range))
             print('Categorical atom size: {}'.format(atom_size))
         if multi_step > 1:
@@ -353,7 +356,8 @@ class DQN(base_agent):
                     )
         
                     # determine the projected atom structure using the offset and predicted distribution
-                    proj_distribution = torch.zeros(next_distribution.size(), device=self.device)                    
+                    proj_distribution = torch.zeros(next_distribution.size(), device=self.device)       
+                    
                     proj_distribution.view(-1).index_add_(
                         0, (l + offset).view(-1), (next_distribution * (u.float() - b)).view(-1)
                     )                    
@@ -514,7 +518,7 @@ if __name__ == "__main__":
                 replay_buffer=buffer,
                 target_update_method="hard", 
                 exploration_method="noisy_network",
-                algorithm_type="default",
+                algorithm_type="rainbow",
                 categorical=False, 
                 seed=0
                 ) 

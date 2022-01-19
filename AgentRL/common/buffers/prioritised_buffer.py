@@ -99,6 +99,9 @@ class prioritised_replay_buffer(base_buffer):
         # get indexes, priorities and data from tree search
         outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]        
         
+        # check none of the outputs are zero
+        outputs = [output if output != 0 else outputs[idx - 1] for idx, output in enumerate(outputs)] 
+        
         if multi_step > 1:
             
             # get the current batch
@@ -128,7 +131,7 @@ class prioritised_replay_buffer(base_buffer):
                     done_index = len(rewards) 
                     done_val = False
                 
-                # udpdate the done_index if it will take data from overlap 
+                # update the done_index if it will take data from overlap 
                 diff = self.tree.write - (done_index + idx)
                 if diff <= 0 and diff > -multi_step:        
                     done_index = done_index + diff - 1                    
@@ -314,45 +317,49 @@ class binary_sum_tree:
         
 if __name__ == '__main__':
     
-    buffer = prioritised_replay_buffer(max_size=100_000)
+    seeds = 1
     
-    # test the appending to the array    
-    tic = time.perf_counter()
+    for seed in range(seeds):
+        
+        buffer = prioritised_replay_buffer(max_size=100_000, seed=seed)
     
-    for i in range(100_005):
+        # test the appending to the array    
+        tic = time.perf_counter()
         
-        state = [random.randint(0, 10), random.randint(0, 10)]
-        next_state = random.randint(0, 10)
-        action = random.randint(0, 10)
-        reward = random.randint(0, 10)
-        done = False
+        for i in range(100_005):
+            
+            state = [random.randint(0, 10), random.randint(0, 10)]
+            next_state = random.randint(0, 10)
+            action = random.randint(0, 10)
+            reward = random.randint(0, 10)
+            done = False
+            
+            buffer.push(state=state, action=action, next_state=state, reward=reward, done=done)
+            
+            if i > 100_000:
+                pass
+                # print(buffer.buffer[-1])
+            
+        toc = time.perf_counter()
+        print('Appending took {} seconds'.format(toc - tic))    
+        print('Final buffer length: {}'.format(buffer.get_length()))  
         
-        buffer.push(state=state, action=action, next_state=state, reward=reward, done=done)
+        # test the sampling from the array
+        tic_1 = time.perf_counter()
         
-        if i > 100_000:
-            pass
-            # print(buffer.buffer[-1])
-        
-    toc = time.perf_counter()
-    print('Appending took {} seconds'.format(toc - tic))    
-    print('Final buffer length: {}'.format(buffer.get_length()))  
-    
-    # test the sampling from the array
-    tic_1 = time.perf_counter()
-    
-    for i in range(10_000):
-        
-        batch, idxs, is_weight = buffer.sample(batch_size=32, multi_step=1)
-        state, action, reward, next_state, done = batch        
-        
-        if i % 1_000 == 0:
-            # print(action)
-            # print(type(action))
-            # print(action.shape)
-            # print('------------')
-            pass
-        
-    toc_1 = time.perf_counter()
-    print('Sampling took {} seconds'.format(toc_1 - tic_1))    
+        for i in range(10_000):
+            
+            batch, idxs, is_weight = buffer.sample(batch_size=32, multi_step=1)
+            state, action, reward, next_state, done = batch        
+            
+            if i % 1_000 == 0:
+                # print(action)
+                # print(type(action))
+                # print(action.shape)
+                # print('------------')
+                pass
+            
+        toc_1 = time.perf_counter()
+        print('Sampling took {} seconds'.format(toc_1 - tic_1))    
     
 #################################################################
