@@ -8,7 +8,7 @@ Created on Sat Nov 13 10:50:27 2021
 
 from setuptools import setup, find_packages
 
-VERSION = '0.0.15' 
+VERSION = '0.0.17' 
 DESCRIPTION = 'AgentRL'
 LONG_DESCRIPTION = 'A package containing several lightweight reinforcement learning agents'
 

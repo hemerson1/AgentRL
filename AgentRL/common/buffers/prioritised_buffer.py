@@ -88,19 +88,19 @@ class prioritised_replay_buffer(base_buffer):
     def sample(self, batch_size, device='cpu', multi_step=1, gamma=0.99): 
                         
         # divide the tree into segments
-        segment = self.tree.total() / batch_size
+        segment = (self.tree.total() + 100) / batch_size
         
         # update beta incrementally until it is 1
         self.beta = min(1., self.beta + self.beta_increment_per_sampling)
         
         # generate a range of samples (need to cap priority at the current max)
-        samples = [random.uniform(segment * i, min(segment * (i + 1), self.max_priority)) for i in range(batch_size)]        
+        samples = [random.uniform(segment * i, min(segment * (i + 1), self.max_priority)) for i in range(batch_size)]  
         
         # get indexes, priorities and data from tree search
-        outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]        
+        outputs = [self.tree.get(sample) for _, sample in enumerate(samples)]    
         
         # check none of the outputs are zero
-        outputs = [output if output != 0 else outputs[idx - 1] for idx, output in enumerate(outputs)] 
+        outputs = [output if output[2] != 0 else outputs[idx - 1] for idx, output in enumerate(outputs)] 
         
         if multi_step > 1:
             
