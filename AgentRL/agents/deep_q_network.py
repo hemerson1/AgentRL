@@ -7,8 +7,8 @@ Created on Sat Nov 13 12:01:19 2021
 """
 
 """ 
-DQN - An implementation of a deep Q network originally introduced in:
-      https://arxiv.org/abs/1312.5602
+An implementation of a deep Q network originally introduced in:
+    https://arxiv.org/abs/1312.5602
       
 Includes the following modifications:
     - double
@@ -223,6 +223,9 @@ class DQN(base_agent):
         # Reset the policy, network and buffer components
         self.reset()
         
+    """
+    Reset the exploration and neural network parameters.
+    """        
     def reset(self):
         
         # Reset the torch, numpy and random seed
@@ -293,7 +296,11 @@ class DQN(base_agent):
             
         # Initialise the optimiser
         self.optimiser = torch.optim.Adam(self.q_net.parameters(), lr=self.learning_rate)          
-                
+    
+    
+    """
+    Sample a batch of data from the replay and train the model.
+    """
     def update(self):
         
         # Update the network at the specified interval
@@ -446,7 +453,10 @@ class DQN(base_agent):
         
         # Update the timesteps
         self.current_step += 1
-                            
+        
+    """
+    Use a specified policy to select the action.
+    """                            
     def get_action(self, state): 
         
         #  ensure that the batch dim is set to 1
@@ -465,12 +475,17 @@ class DQN(base_agent):
         elif self.exploration_method == "noisy_network" or self.algorithm_type == "rainbow":
             action = self.policy.get_action(self.q_net, state)   
             
-        return action          
-        
+        return action   
+
+    """
+    Add data to the specified neural network.
+    """        
     def push(self, state, action, next_state, reward, done):        
         self.replay_buffer.push(state=state, action=action, next_state=next_state, reward=reward, done=done)
-            
-
+    
+    """
+    Save the model weights.
+    """
     def save_model(self, path):
         
         # save the q network
@@ -479,7 +494,11 @@ class DQN(base_agent):
         # save the target network
         if self.algorithm_type == "double" or self.algorithm_type == "duelling" or self.algorithm_type == "rainbow":
             torch.save(self.target_q_net.state_dict(), path + '_target_q_network')
+    
         
+    """
+    Load the model weights.
+    """
     def load_model(self, path):
         
         # load the q network

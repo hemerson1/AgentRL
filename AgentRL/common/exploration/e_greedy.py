@@ -7,10 +7,9 @@ Created on Sat Nov 13 18:28:50 2021
 """
 
 """ 
-epsilon_greedy - Implementation of an epsilon greedy policy in which the agent
-                 has a probability of selecting a random action as opposed to 
-                 selecting the action which maximises expected reward
-
+Implementation of an epsilon greedy policy in which the agent has a
+probability of selecting a random action as opposed to selecting the 
+action which maximises expected reward
 """
 
 from AgentRL.common.exploration import base_exploration
@@ -40,7 +39,11 @@ class epsilon_greedy(base_exploration):
         self.current_exploration = starting_expl_threshold
         self.expl_decay_factor = expl_decay_factor
         self.min_expl_threshold = min_expl_threshold        
-        
+    
+    """
+    Use the current state and value network to return a random action 
+    or a greedy action.
+    """
     def get_action(self, value_network, state):
                 
         # get a random number
@@ -61,11 +64,17 @@ class epsilon_greedy(base_exploration):
                 
         return action
     
+    """
+    Reset the exploration rate.
+    """
     def reset(self):
         
         # reset the current exploration to the starting
         self.current_exploration = self.starting_expl_threshold
     
+    """
+    Update the exploration rate.
+    """
     def update(self):
         
         # multiply by decay factor

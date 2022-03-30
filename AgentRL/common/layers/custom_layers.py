@@ -7,7 +7,7 @@ Created on Sat Nov 13 17:30:59 2021
 """
 
 """ 
-standard_value_network -  a simple feedforward value network
+A linear layer for a feedforward neural network with an added noise.
 
 """
 
@@ -38,7 +38,10 @@ class factorised_noisy_linear_layer(nn.Module):
 
         self.reset_parameters()
         self.reset_noise()
-
+        
+    """
+    Get the prediction.
+    """
     def forward(self, x):
         self.reset_noise()
         
@@ -54,7 +57,10 @@ class factorised_noisy_linear_layer(nn.Module):
         y = F.linear(x, weight, bias)
         
         return y
-
+    
+    """
+    Reset the network weights.
+    """
     def reset_parameters(self):
         std = 1 / math.sqrt(self.num_in)
         self.mu_weight.data.uniform_(-std, std)
@@ -62,7 +68,10 @@ class factorised_noisy_linear_layer(nn.Module):
 
         self.sigma_weight.data.fill_(0.5 / math.sqrt(self.num_in))
         self.sigma_bias.data.fill_(0.5 / math.sqrt(self.num_in))
-
+        
+    """
+    Reset the parameters of noise.
+    """
     def reset_noise(self):
         eps_i = torch.randn(self.num_in).to(self.device)
         eps_j = torch.randn(self.num_out).to(self.device)

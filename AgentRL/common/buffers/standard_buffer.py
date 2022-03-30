@@ -7,9 +7,8 @@ Created on Sat Nov 13 14:06:47 2021
 """
 
 """ 
-standard_replay_buffer - A simple replay buffer storing samples of data and 
-                         then returning a random batch 
-
+A simple replay buffer storing samples of data and then returning a 
+random batch.
 """
 
 from AgentRL.common.buffers import base_buffer
@@ -53,7 +52,10 @@ class standard_replay_buffer(base_buffer):
         
         # reset to default
         self.reset()
-        
+    
+    """
+    Empty the replay.
+    """
     def reset(self):
         
         # reset the seeding
@@ -65,7 +67,10 @@ class standard_replay_buffer(base_buffer):
         # empty the buffer
         self.buffer = []
         self.current_size = 0        
-
+    
+    """
+    Adds samples to the replay
+    """ 
     def push(self, state, action, next_state, reward, done):
         
         # add the most recent sample
@@ -76,7 +81,10 @@ class standard_replay_buffer(base_buffer):
         if len(self.buffer) > self.max_size:
             del self.buffer[0]
             self.current_size -=1
-                        
+    
+    """
+    Returns a sample from the replay of a specified batch size.
+    """                  
     def sample(self, batch_size, device='cpu', multi_step=1, gamma=0.99):        
         
         # get a batch and unpack it into its constituents
@@ -147,7 +155,10 @@ class standard_replay_buffer(base_buffer):
             action = action.unsqueeze(1)
         
         return state, action, next_state, reward, done            
-        
+    
+    """
+    Get the length of the replay.
+    """
     def get_length(self):
         return len(self.buffer)        
     

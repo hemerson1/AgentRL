@@ -7,18 +7,14 @@ Created on Mon Dec 27 17:32:51 2021
 """
 
 """ 
-epsilon_greedy - Implementation of an epsilon greedy policy in which the agent
-                 has a probability of selecting a random action as opposed to 
-                 selecting the action which maximises expected reward
+Selects an action with maximises the reward based on the predicitons of 
+a given value network.
 
 """
 
 from AgentRL.common.exploration import base_exploration
 
 import torch
-
-# For testing:
-from AgentRL.common.value_networks import standard_value_network
 
 class default_argmax(base_exploration):
     
@@ -29,7 +25,10 @@ class default_argmax(base_exploration):
          
         self.action_num = action_num        
         self.device = device  
-        
+    
+    """
+    Get the greedy action.
+    """
     def get_action(self, value_network, state):                
         
         # convert to tensor and select argmax
@@ -39,6 +38,6 @@ class default_argmax(base_exploration):
             action = action.cpu().data.numpy()
                 
         return action
-    
+
     def reset(self):
         pass

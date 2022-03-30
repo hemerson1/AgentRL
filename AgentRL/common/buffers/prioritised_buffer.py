@@ -7,9 +7,9 @@ Created on Wed Dec 22 15:13:56 2021
 """
 
 """ 
-standard_replay_buffer - A simple replay buffer storing samples of data and 
-                         then returning a random batch 
-
+A prioritised replay buffer for storing data and preferentially sampling 
+trajectories where the predicted loss was significantly different from the 
+observed. 
 """
 
 from AgentRL.common.buffers import base_buffer
@@ -58,7 +58,10 @@ class prioritised_replay_buffer(base_buffer):
         self.seed = seed
         
         self.reset()
-        
+    
+    """
+    Reset the binary tree.
+    """
     def reset(self):
         
         # reset the seeding
@@ -73,6 +76,9 @@ class prioritised_replay_buffer(base_buffer):
         # set the max priority
         self.max_priority = 1
         
+    """
+    Adds samples to the replay
+    """ 
     def push(self, state, action, next_state, reward, done):
         
         # batch values together
@@ -84,7 +90,9 @@ class prioritised_replay_buffer(base_buffer):
         # create the sample and add it to the tree
         self.tree.add(p, sample) 
         
-                        
+    """
+    Returns a sample from the replay of a specified batch size.
+    """
     def sample(self, batch_size, device='cpu', multi_step=1, gamma=0.99): 
                         
         # divide the tree into segments
@@ -199,12 +207,21 @@ class prioritised_replay_buffer(base_buffer):
 
         return batch_sample, idxs, is_weights 
     
+    """
+    Get the length of the replay.
+    """
     def get_length(self):
         return self.tree.current_size
-
+    
+    """
+    Convert error to priority.
+    """
     def _get_priority(self, error):
         return (error + self.epsilon) ** self.alpha       
     
+    """
+    Update the priority of a sample.
+    """
     def update(self, idx, error):
         
         # get the proprity 
@@ -215,8 +232,11 @@ class prioritised_replay_buffer(base_buffer):
             self.max_priority = p
         
         self.tree.update(idx, p)        
-            
-            
+     
+
+"""
+Binary sum tree for storing samples and managing their priority.
+"""            
 class binary_sum_tree:
     
     def __init__(self, max_size):
@@ -231,7 +251,9 @@ class binary_sum_tree:
         self.write = 0
         
         
-    # store priority and sample
+    """
+    Store the priority and the sample.
+    """
     def add(self, priority, data):
         
         # get the data index (fill from the end)
@@ -253,7 +275,9 @@ class binary_sum_tree:
             self.current_size += 1
             
 
-    # update priority
+    """
+    Recursively update the priority of the sample.
+    """
     def update(self, idx, priority):
         
         # get the change in priority
@@ -265,8 +289,9 @@ class binary_sum_tree:
         # update all values to root node
         self._propagate(idx, change)
         
-        
-    # update to the root node
+    """    
+    Update the sum tree to the root node.
+    """
     def _propagate(self, idx, change):
         
         # get the parent node
@@ -279,8 +304,9 @@ class binary_sum_tree:
         if parent != 0:
             self._propagate(parent, change)
             
-            
-    # get priority and sample
+    """
+    Get the data corresponding to a specified sample.
+    """
     def get(self, sample):
         
         # get the index
@@ -291,8 +317,9 @@ class binary_sum_tree:
 
         return (idx, self.tree[idx], self.data[dataIdx], dataIdx)
     
-
-    # find sample on leaf node
+    """
+    Find a sample on a leaf node.
+    """
     def _retrieve(self, idx, sample):
         
         # get the child nodes of the current node
@@ -311,7 +338,9 @@ class binary_sum_tree:
         else:
             return self._retrieve(right, sample - self.tree[left])
         
-    
+    """
+    Get the sum of tree. 
+    """
     def total(self):
         
         # get the root sum

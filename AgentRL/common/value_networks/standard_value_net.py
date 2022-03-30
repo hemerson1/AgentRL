@@ -7,8 +7,8 @@ Created on Sat Nov 13 17:30:59 2021
 """
 
 """ 
-standard_value_network -  a simple feedforward value network
-
+Neural networks for predicting the state-value function and action-value 
+function for a given state.
 """
 
 from AgentRL.common.value_networks import base_value_network
@@ -21,6 +21,10 @@ import torch.nn.functional as F
 # Inspiration for duelling_value_network
 # https://github.com/gouxiangchen/dueling-DQN-pytorch/blob/master/dueling_dqn.py
 
+"""
+A simple feedforward network for predicting the predicting the value function
+for a given state. This network supports categorical learning and noisy layers.
+"""
 class standard_value_network(base_value_network):
     
     # TODO: tidy up this structure
@@ -63,7 +67,10 @@ class standard_value_network(base_value_network):
         
         # get the activation function
         self.activation = activation
-    
+        
+    """
+    Get the expected return for the state.
+    """    
     def forward(self, state, get_distribution=False):
         
         x = state        
@@ -84,8 +91,11 @@ class standard_value_network(base_value_network):
             x = torch.sum(x * self.support, dim=2)
         
         return x     
-    
-    
+ 
+"""
+A duelling neural network which seperates the predictions of the state-value 
+function and advantage function. This network supports categorical learning and noisy layers.
+"""    
 class duelling_value_network(base_value_network):
     
     def __init__(self, state_dim, action_dim, hidden_dim=64, activation=F.relu,
@@ -138,6 +148,11 @@ class duelling_value_network(base_value_network):
         # get the activation function
         self.activation = activation
     
+    
+    """
+    Determine the state-action value from the decoupled predictions of the
+    state-value function and advantage function.
+    """
     def forward(self, state, get_distribution=False):
         
         x = state        
